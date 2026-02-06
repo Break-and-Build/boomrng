@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        body {
+            width: 320px;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            background: #0b1a15;
+            color: #e0e0e0;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: #fff;
+            letter-spacing: -1px;
+            text-transform: lowercase;
+            font-weight: bold;
+        }
+
+        label {
+            display: block;
+            margin-top: 15px;
+            font-size: 11px;
+            color: #4CAF50;
+            text-transform: uppercase;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        textarea,
+        input {
+            width: 100%;
+            box-sizing: border-box;
+            background: #13241d;
+            border: 1px solid #2e4d40;
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        textarea:focus,
+        input:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+
+        button {
+            width: 100%;
+            margin-top: 25px;
+            padding: 12px;
+            background: #e0e0e0;
+            color: #0b1a15;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 2px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #fff;
+        }
+
+        .toggle-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+            border-bottom: 1px solid #2e4d40;
+            padding-bottom: 15px;
+        }
+
+        input[type="checkbox"] {
+            width: auto;
+            accent-color: #4CAF50;
+            transform: scale(1.2);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="toggle-row">
+        <h1>boomrng</h1>
+        <input type="checkbox" id="enabled" style="width: auto;">
+    </div>
+
+    <label>Blocked Sites (one per line)</label>
+    <textarea id="blocked" rows="4" placeholder="youtube.com&#10;linkedin.com"></textarea>
+
+    <label>Allowed Sites (White-list)</label>
+    <textarea id="allowed" rows="2" placeholder="localhost&#10;google.com"></textarea>
+
+    <label>Redirect To</label>
+    <input type="text" id="redirect" placeholder="https://github.com">
+
+    <label>Max Tabs (Optional)</label>
+    <input type="number" id="maxTabs" placeholder="e.g. 10">
+
+    <button id="save">Save Settings</button>
+    <script src="popup.js"></script>
+</body>
+
+</html>
