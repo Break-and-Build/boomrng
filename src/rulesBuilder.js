@@ -46,16 +46,20 @@ export function generateRules(blockedSites, allowedSites, fallbackUrl) {
 
     // 2. BLOCK RULES (Lower Priority)
     blockedSites.forEach(site => {
-        if (!site || site.trim() === "") return;
+        // Handle both the old array of strings AND the new array of objects
+        const siteUrl = typeof site === 'string' ? site : site.url;
+
+        if (!siteUrl || siteUrl.trim() === "") return;
+
         rules.push({
             id: idCounter++,
             priority: 1,
             action: {
                 type: "redirect",
-                redirect: { url: validRedirect } // Now guaranteed to be valid
+                redirect: { url: validRedirect }
             },
             condition: {
-                urlFilter: site.trim(),
+                urlFilter: siteUrl.trim(),
                 resourceTypes: ["main_frame"]
             }
         });
