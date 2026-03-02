@@ -3,7 +3,7 @@
   "name": "boomrng",
   "version": "1.0.0",
   "description": "Focus enforcement for knowledge workers.",
-  "permissions": ["storage", "tabs", "declarativeNetRequest", "notifications"],
+  "permissions": ["storage", "tabs", "declarativeNetRequest", "alarms"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "src/background.js",

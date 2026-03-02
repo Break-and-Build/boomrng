@@ -1,9 +1,45 @@
 import { generateRules } from './rulesBuilder.js';
 
-// --- HELPER: Update the Badge (The "Counter") ---
+function isFeatureEnabled(data) {
+    return data.enabled !== false;
+}
+
+let ruleRefreshInFlight = null;
+let ruleRefreshQueued = false;
+const RULE_TIMER_ALARM = 'rules-refresh-timer';
+
+function computeNextTimerTransition(blockedSites, nowMs = Date.now()) {
+    let nextAt = null;
+
+    (blockedSites || []).forEach((site) => {
+        if (!site || typeof site !== 'object') return;
+
+        const lockUntil = Number(site.lockUntil);
+        if (Number.isFinite(lockUntil) && lockUntil > nowMs) {
+            nextAt = nextAt === null ? lockUntil : Math.min(nextAt, lockUntil);
+        }
+
+        const bypassUntil = Number(site.bypassUntil);
+        if (Number.isFinite(bypassUntil) && bypassUntil > nowMs) {
+            nextAt = nextAt === null ? bypassUntil : Math.min(nextAt, bypassUntil);
+        }
+    });
+
+    return nextAt;
+}
+
+async function scheduleNextTimerRefresh(blockedSites) {
+    await chrome.alarms.clear(RULE_TIMER_ALARM);
+
+    const nextAt = computeNextTimerTransition(blockedSites);
+    if (!nextAt) return;
+
+    chrome.alarms.create(RULE_TIMER_ALARM, { when: nextAt + 500 });
+}
+
 async function updateBadge() {
     const data = await chrome.storage.local.get(['maxTabs', 'enabled']);
-    const isEnabled = data.enabled !== false;
+    const isEnabled = isFeatureEnabled(data);
 
     if (!isEnabled) {
         chrome.action.setBadgeText({ text: "OFF" });
@@ -33,9 +69,10 @@ async function updateBadge() {
 // --- HELPER: The Enforcer (Shared Logic) ---
 async function enforceTabLimit(tab) {
     const data = await chrome.storage.local.get(['maxTabs', 'enabled']);
-    if (!data.enabled || !data.maxTabs) return;
+    if (!isFeatureEnabled(data) || !data.maxTabs) return;
 
-    const maxTabs = parseInt(data.maxTabs);
+    const maxTabs = Number.parseInt(data.maxTabs, 10);
+    if (!Number.isFinite(maxTabs) || maxTabs <= 0) return;
     const tabs = await chrome.tabs.query({ currentWindow: true });
 
     // If we are OVER the limit
@@ -45,7 +82,7 @@ async function enforceTabLimit(tab) {
 
         // 2. Redirect to the Wall
         const limitPageUrl = chrome.runtime.getURL("src/limit.html");
-        chrome.tabs.update(tab.id, { url: limitPageUrl });
+        if (tab?.id) chrome.tabs.update(tab.id, { url: limitPageUrl });
         console.log("boomrng: Limit enforcement triggered.");
     }
 }
@@ -53,8 +90,12 @@ async function enforceTabLimit(tab) {
 // --- FEATURE 1: URL ENFORCEMENT ---
 chrome.storage.onChanged.addListener((changes, namespace) => {
     if (namespace === 'local') {
-        updateEnforcementRules();
-        updateBadge();
+        refreshEnforcementRules().catch((error) => {
+            console.error("boomrng: Failed to refresh enforcement rules.", error);
+        });
+        updateBadge().catch((error) => {
+            console.error("boomrng: Failed to update badge.", error);
+        });
     }
 });
 
@@ -63,21 +104,40 @@ async function updateEnforcementRules() {
 
     const currentRules = await chrome.declarativeNetRequest.getDynamicRules();
     const currentRuleIds = currentRules.map(rule => rule.id);
-    await chrome.declarativeNetRequest.updateDynamicRules({
-        removeRuleIds: currentRuleIds
-    });
-
-    if (!data.enabled) return;
-
-    const newRules = generateRules(
-        data.blockedSites || [],
-        data.allowedSites || [],
-        data.fallbackRedirect
-    );
+    const newRules = isFeatureEnabled(data)
+        ? generateRules(
+            data.blockedSites || [],
+            data.allowedSites || [],
+            data.fallbackRedirect
+        )
+        : [];
 
     await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: currentRuleIds,
         addRules: newRules
     });
+
+    await scheduleNextTimerRefresh(data.blockedSites || []);
+}
+
+async function refreshEnforcementRules() {
+    if (ruleRefreshInFlight) {
+        ruleRefreshQueued = true;
+        return ruleRefreshInFlight;
+    }
+
+    ruleRefreshInFlight = (async () => {
+        do {
+            ruleRefreshQueued = false;
+            await updateEnforcementRules();
+        } while (ruleRefreshQueued);
+    })();
+
+    try {
+        await ruleRefreshInFlight;
+    } finally {
+        ruleRefreshInFlight = null;
+    }
 }
 
 // --- FEATURE 2: TRIGGERS ---
@@ -98,8 +158,28 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
 // Trigger C: When a tab is closed
 chrome.tabs.onRemoved.addListener(() => {
-    updateBadge();
+    updateBadge().catch((error) => {
+        console.error("boomrng: Failed to update badge after tab close.", error);
+    });
 });
 
-// Initialize on startup
-updateBadge();
+chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name !== RULE_TIMER_ALARM) return;
+    refreshEnforcementRules().catch((error) => {
+        console.error("boomrng: Failed to refresh rules on timer transition.", error);
+    });
+});
+
+function syncStateOnBoot() {
+    refreshEnforcementRules().catch((error) => {
+        console.error("boomrng: Failed to initialize enforcement rules.", error);
+    });
+    updateBadge().catch((error) => {
+        console.error("boomrng: Failed to initialize badge.", error);
+    });
+}
+
+chrome.runtime.onInstalled.addListener(syncStateOnBoot);
+chrome.runtime.onStartup.addListener(syncStateOnBoot);
+
+syncStateOnBoot();
