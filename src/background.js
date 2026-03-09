@@ -49,7 +49,7 @@ async function updateBadge() {
 
     const tabs = await chrome.tabs.query({ currentWindow: true });
     const count = tabs.length;
-    const max = parseInt(data.maxTabs) || 0;
+    const max = Number.parseInt(data.maxTabs, 10) || 0;
 
     chrome.action.setBadgeText({ text: count.toString() });
 

@@ -18,9 +18,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     const container = document.getElementById('blocked-sites-container');
-    const timerSummary = document.getElementById('timer-summary');
+    const blockedSitesMeta = document.getElementById('blocked-sites-meta');
     const settingsError = document.getElementById('settings-error');
     const overrideStatus = document.getElementById('override-status');
+    const overrideHelp = document.getElementById('override-help');
     const overrideSiteSelect = document.getElementById('override-site');
     const overridePinInput = document.getElementById('override-pin');
     const overrideTimerBtn = document.getElementById('btn-override-timer');
@@ -125,8 +126,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             option.value = '';
             option.textContent = 'No active timed locks';
             overrideSiteSelect.appendChild(option);
+            overrideSiteSelect.disabled = true;
+            overridePinInput.disabled = true;
+            overridePinInput.value = '';
+            overridePinInput.placeholder = 'No timed locks to override';
             overrideTimerBtn.disabled = true;
-            return;
+            return 0;
         }
 
         const placeholder = document.createElement('option');
@@ -143,7 +148,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const hasPreviousSelection = activeTimedSites.some((site) => site.url === selectedSite);
         overrideSiteSelect.value = hasPreviousSelection ? selectedSite : '';
+        overrideSiteSelect.disabled = false;
+        overridePinInput.disabled = false;
+        overridePinInput.placeholder = 'Enter PIN to bypass timer';
         overrideTimerBtn.disabled = !overrideSiteSelect.value;
+        return activeTimedSites.length;
     }
 
     function updateRowTimerStatus(row, nowMs = Date.now()) {
@@ -197,19 +206,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function refreshLiveCountdowns() {
         const nowMs = Date.now();
-        let activeCount = 0;
+        let activeRowCount = 0;
 
         container.querySelectorAll('.site-row').forEach((row) => {
-            if (updateRowTimerStatus(row, nowMs)) activeCount += 1;
+            if (updateRowTimerStatus(row, nowMs)) activeRowCount += 1;
         });
 
-        if (timerSummary) {
-            timerSummary.textContent = activeCount > 0
-                ? `${activeCount} active timed lock${activeCount > 1 ? 's' : ''}`
-                : 'No active timed locks';
+        if (blockedSitesMeta) {
+            blockedSitesMeta.textContent = activeRowCount > 0
+                ? `Timer (mins) optional. ${activeRowCount} active timed lock${activeRowCount > 1 ? 's' : ''}.`
+                : 'Timer (mins) optional. Blank = always blocked.';
         }
 
-        populateOverrideSites(data.blockedSites || [], nowMs);
+        const activeOverrideCount = populateOverrideSites(data.blockedSites || [], nowMs);
+        if (overrideHelp) {
+            overrideHelp.textContent = activeOverrideCount > 0
+                ? `${activeOverrideCount} active timed lock${activeOverrideCount > 1 ? 's' : ''} available for PIN override.`
+                : 'Only active timed locks appear here.';
+        }
     }
 
     function startCountdownTicker() {
@@ -241,7 +255,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         timerInput.min = '1';
         timerInput.step = '1';
         timerInput.className = 'timer-input';
-        timerInput.placeholder = 'minutes';
+        timerInput.placeholder = 'mins';
         timerInput.value = timerMinutes;
 
         const deleteBtn = document.createElement('button');
