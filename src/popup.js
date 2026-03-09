@@ -1,6 +1,5 @@
 document.addEventListener('DOMContentLoaded', async () => {
     let data = await chrome.storage.local.get([
-        'userEmail',
         'userPin',
         'blockedSites',
         'allowedSites',
@@ -11,7 +10,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const screens = {
         splash: document.getElementById('screen-splash'),
-        auth: document.getElementById('screen-auth'),
         setupPin: document.getElementById('screen-setup-pin'),
         enterPin: document.getElementById('screen-enter-pin'),
         settings: document.getElementById('screen-settings')
@@ -25,11 +23,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     const overrideSiteSelect = document.getElementById('override-site');
     const overridePinInput = document.getElementById('override-pin');
     const overrideTimerBtn = document.getElementById('btn-override-timer');
+    const openPinSetupBtn = document.getElementById('btn-open-pin-setup');
+    const cancelPinSetupBtn = document.getElementById('btn-cancel-pin-setup');
+    const resetPinLockBtn = document.getElementById('btn-reset-pin-lock');
     let countdownIntervalId = null;
 
     function showScreen(screenName) {
+        if (screenName !== 'settings') {
+            stopCountdownTicker();
+        }
         Object.values(screens).forEach((screen) => screen.classList.remove('active'));
         screens[screenName].classList.add('active');
+    }
+
+    function updatePinSetupButtonLabel() {
+        openPinSetupBtn.textContent = data.userPin ? 'Change PIN Lock' : 'Set PIN Lock';
     }
 
     function setSettingsError(message = '') {
@@ -219,10 +227,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         const activeOverrideCount = populateOverrideSites(data.blockedSites || [], nowMs);
+        if (!data.userPin) {
+            overridePinInput.disabled = true;
+            overridePinInput.value = '';
+            overridePinInput.placeholder = 'Set a PIN lock to use overrides';
+            overrideTimerBtn.disabled = true;
+        }
+
         if (overrideHelp) {
-            overrideHelp.textContent = activeOverrideCount > 0
-                ? `${activeOverrideCount} active timed lock${activeOverrideCount > 1 ? 's' : ''} available for PIN override.`
-                : 'Only active timed locks appear here.';
+            if (!data.userPin) {
+                overrideHelp.textContent = 'Set a PIN lock to enable timer overrides.';
+            } else {
+                overrideHelp.textContent = activeOverrideCount > 0
+                    ? `${activeOverrideCount} active timed lock${activeOverrideCount > 1 ? 's' : ''} available for PIN override.`
+                    : 'Only active timed locks appear here.';
+            }
         }
     }
 
@@ -331,6 +350,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('enabled').checked = savedData.enabled !== false;
         overridePinInput.value = '';
         setOverrideStatus('');
+        updatePinSetupButtonLabel();
         refreshLiveCountdowns();
         startCountdownTicker();
     }
@@ -344,32 +364,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- 1. SPLASH ---
     setTimeout(() => {
         if (!data.userPin) {
-            showScreen('auth');
+            loadSettingsData(data);
+            showScreen('settings');
         } else {
             showScreen('enterPin');
         }
-    }, 1500);
+    }, 450);
 
-    // --- 2. AUTH SCREEN ---
-    document.getElementById('skip-auth').addEventListener('click', () => showScreen('setupPin'));
-
-    document.getElementById('btn-continue-auth').addEventListener('click', () => {
-        const email = document.getElementById('auth-email').value;
-        const pass = document.getElementById('auth-pass').value;
-        if (email && pass) {
-            chrome.storage.local.set({ userEmail: email });
-            data.userEmail = email;
-        }
+    // --- 2. PIN SETUP SCREEN ---
+    openPinSetupBtn.addEventListener('click', () => {
+        document.getElementById('setup-pin-1').value = '';
+        document.getElementById('setup-pin-2').value = '';
+        document.getElementById('setup-error').textContent = '';
         showScreen('setupPin');
     });
 
-    // --- 3. SETUP PIN SCREEN ---
+    cancelPinSetupBtn.addEventListener('click', () => {
+        loadSettingsData(data);
+        showScreen('settings');
+    });
+
+    // --- 3. SAVE PIN ---
     document.getElementById('btn-save-pin').addEventListener('click', () => {
         const p1 = document.getElementById('setup-pin-1').value;
         const p2 = document.getElementById('setup-pin-2').value;
         const err = document.getElementById('setup-error');
 
-        if (p1.length < 4) return err.textContent = 'PIN must be at least 4 digits';
+        if (!/^\d{4,6}$/.test(p1)) return err.textContent = 'PIN must be 4-6 digits';
         if (p1 !== p2) return err.textContent = 'PINs do not match';
 
         chrome.storage.local.set({ userPin: p1 }, () => {
@@ -392,10 +413,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    resetPinLockBtn.addEventListener('click', () => {
+        const confirmed = window.confirm('Reset PIN lock and unlock settings?');
+        if (!confirmed) return;
+
+        chrome.storage.local.remove(['userPin'], () => {
+            data.userPin = null;
+            document.getElementById('unlock-pin').value = '';
+            loadSettingsData(data);
+            showScreen('settings');
+        });
+    });
+
     // --- 5. OVERRIDE TIMED LOCK ---
     overrideTimerBtn.addEventListener('click', async () => {
         setSettingsError('');
         setOverrideStatus('');
+
+        if (!data.userPin) {
+            setOverrideStatus('Set a PIN lock before using timer override', false);
+            return;
+        }
 
         const siteToOverride = overrideSiteSelect.value;
         if (!siteToOverride) {

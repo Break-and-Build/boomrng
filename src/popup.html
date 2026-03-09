@@ -263,27 +263,17 @@
         </div>
     </div>
 
-    <div id="screen-auth" class="screen">
-        <h2>Sign Up</h2>
-        <div class="logo-header"><img src="../images/boomrng-icon.svg" alt="logo"> boomrng</div>
-        <label>Email</label>
-        <input type="email" id="auth-email" placeholder="username@mail.com">
-        <label>Password</label>
-        <input type="password" id="auth-pass" placeholder="••••••••">
-        <button class="text-btn" id="skip-auth">Skip / Continue without Account</button>
-        <button class="primary" id="btn-continue-auth" style="margin-top: 30px;">Continue</button>
-    </div>
-
     <div id="screen-setup-pin" class="screen">
-        <h2>Setup PIN</h2>
+        <h2>PIN Lock (Optional)</h2>
         <div class="logo-header"><img src="../images/boomrng-icon.svg" alt="logo"> boomrng</div>
-        <label>Setup PIN (4-6 digits)</label>
+        <label>Set PIN (4-6 digits)</label>
         <input type="password" id="setup-pin-1" placeholder="••••" maxlength="6"
             style="letter-spacing: 5px; text-align: center; font-size: 18px;">
         <label>Confirm PIN</label>
         <input type="password" id="setup-pin-2" placeholder="••••" maxlength="6"
             style="letter-spacing: 5px; text-align: center; font-size: 18px;">
         <div id="setup-error" class="error-msg"></div>
+        <button class="text-btn" id="btn-cancel-pin-setup">Back to Settings</button>
         <button class="primary" id="btn-save-pin" style="margin-top: 30px;">Save PIN</button>
     </div>
 
@@ -294,6 +284,7 @@
         <input type="password" id="unlock-pin" placeholder="••••" maxlength="6"
             style="letter-spacing: 5px; text-align: center; font-size: 18px;">
         <div id="unlock-error" class="error-msg"></div>
+        <button class="text-btn" id="btn-reset-pin-lock">Forgot PIN? Reset PIN Lock</button>
         <button class="primary" id="btn-unlock" style="margin-top: 30px;">Unlock Settings</button>
     </div>
 
@@ -320,6 +311,8 @@
 
         <label>Max Tabs (Optional)</label>
         <input type="number" id="maxTabs" min="1" step="1" placeholder="e.g. 10">
+
+        <button class="text-btn" id="btn-open-pin-setup" style="margin-top: 4px; text-align: center;">Set PIN Lock</button>
 
         <div class="override-panel">
             <label style="margin-top: 0;">Timer Override (PIN)</label>

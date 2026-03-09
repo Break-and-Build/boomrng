@@ -8,6 +8,7 @@ boomrng enforces focus by blocking distracting sites and limiting your open tabs
 
 - **Hard Redirects:** Blocks sites like YouTube and snaps you back to work.
 - **Timed Site Locks:** Set per-site lock timers in minutes, with automatic expiry.
+- **Optional PIN Lock:** Protect settings with a local PIN (4-6 digits).
 - **PIN Timer Override:** Temporarily bypass an active timed lock by entering your PIN.
 - **Tab Pressure:** Enforces a max tab limit (e.g., 5 tabs). If you open a 6th, it forces you to close one.
 - **The Wall:** Prevents you from browsing inside an "over-limit" tab.
@@ -34,3 +35,8 @@ boomrng enforces focus by blocking distracting sites and limiting your open tabs
 1.  In settings, go to **Timer Override (PIN)**.
 2.  Select a site with an active timed lock.
 3.  Enter your PIN and click **Unlock Selected Site**.
+
+## PIN Notes
+
+- PIN is local to your browser profile (no cloud account).
+- If you forget your PIN, use **Forgot PIN? Reset PIN Lock** on the unlock screen.
