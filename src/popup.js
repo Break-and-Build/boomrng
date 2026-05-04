@@ -27,6 +27,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const cancelPinSetupBtn = document.getElementById('btn-cancel-pin-setup');
     const resetPinLockBtn = document.getElementById('btn-reset-pin-lock');
     let countdownIntervalId = null;
+    let isOverrideSelectInteracting = false;
+    let pendingOverrideSites = null;
+    let lastOverrideSignature = '';
 
     function showScreen(screenName) {
         if (screenName !== 'settings') {
@@ -113,9 +116,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
     }
 
-    function populateOverrideSites(sites, nowMs = Date.now()) {
-        const selectedSite = overrideSiteSelect.value;
-        const activeTimedSites = (sites || [])
+    function getActiveTimedSites(sites, nowMs = Date.now()) {
+        return (sites || [])
             .filter((site) => site && typeof site === 'object' && isTimedLockActive(site, nowMs))
             .map((site) => {
                 const lockUntil = Number(site.lockUntil);
@@ -126,6 +128,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 };
             })
             .sort((a, b) => a.remainingMinutes - b.remainingMinutes);
+    }
+
+    function buildOverrideSignature(activeTimedSites) {
+        return activeTimedSites
+            .map((site) => `${site.url}:${site.remainingMinutes}`)
+            .join('|');
+    }
+
+    function renderOverrideSites(activeTimedSites) {
+        const selectedSite = overrideSiteSelect.value;
+        const signature = buildOverrideSignature(activeTimedSites);
 
         overrideSiteSelect.innerHTML = '';
 
@@ -139,7 +152,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             overridePinInput.value = '';
             overridePinInput.placeholder = 'No timed locks to override';
             overrideTimerBtn.disabled = true;
-            return 0;
+            lastOverrideSignature = signature;
+            return;
         }
 
         const placeholder = document.createElement('option');
@@ -160,6 +174,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         overridePinInput.disabled = false;
         overridePinInput.placeholder = 'Enter PIN to bypass timer';
         overrideTimerBtn.disabled = !overrideSiteSelect.value;
+        lastOverrideSignature = signature;
+    }
+
+    function populateOverrideSites(sites, nowMs = Date.now(), { force = false } = {}) {
+        const activeTimedSites = getActiveTimedSites(sites, nowMs);
+        const signature = buildOverrideSignature(activeTimedSites);
+
+        if (!force && isOverrideSelectInteracting) {
+            pendingOverrideSites = activeTimedSites;
+            return activeTimedSites.length;
+        }
+
+        const shouldRender = force
+            || signature !== lastOverrideSignature
+            || overrideSiteSelect.options.length === 0;
+
+        if (shouldRender) {
+            renderOverrideSites(activeTimedSites);
+        } else {
+            overrideTimerBtn.disabled = overrideSiteSelect.disabled || !overrideSiteSelect.value;
+        }
+
+        pendingOverrideSites = null;
         return activeTimedSites.length;
     }
 
@@ -349,6 +386,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('maxTabs').value = savedData.maxTabs || '';
         document.getElementById('enabled').checked = savedData.enabled !== false;
         overridePinInput.value = '';
+        pendingOverrideSites = null;
+        lastOverrideSignature = '';
         setOverrideStatus('');
         updatePinSetupButtonLabel();
         refreshLiveCountdowns();
@@ -356,8 +395,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     document.getElementById('btn-add-site').addEventListener('click', () => addSiteRow());
+    overrideSiteSelect.addEventListener('mousedown', () => {
+        isOverrideSelectInteracting = true;
+    });
+    overrideSiteSelect.addEventListener('focus', () => {
+        isOverrideSelectInteracting = true;
+    });
+    overrideSiteSelect.addEventListener('blur', () => {
+        isOverrideSelectInteracting = false;
+        if (pendingOverrideSites !== null) {
+            renderOverrideSites(pendingOverrideSites);
+            pendingOverrideSites = null;
+        }
+        overrideTimerBtn.disabled = overrideSiteSelect.disabled || !overrideSiteSelect.value;
+    });
     overrideSiteSelect.addEventListener('change', () => {
-        overrideTimerBtn.disabled = !overrideSiteSelect.value;
+        overrideTimerBtn.disabled = overrideSiteSelect.disabled || !overrideSiteSelect.value;
     });
     window.addEventListener('beforeunload', stopCountdownTicker);
 
