@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "boomrng",
-  "version": "1.1.0",
-  "description": "Focus enforcement for knowledge workers.",
+  "version": "1.1.1",
+  "description": "Block distracting sites, enforce timed locks, and keep tab count under control.",
   "permissions": ["storage", "tabs", "declarativeNetRequest", "alarms"],
   "host_permissions": ["<all_urls>"],
   "background": {
@@ -10,6 +10,7 @@
     "type": "module"
   },
   "action": {
+    "default_title": "boomrng",
     "default_popup": "src/popup.html",
     "default_icon": {
       "16": "images/icon-16.png",

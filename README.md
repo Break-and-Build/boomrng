@@ -40,3 +40,9 @@ boomrng enforces focus by blocking distracting sites and limiting your open tabs
 
 - PIN is local to your browser profile (no cloud account).
 - If you forget your PIN, use **Forgot PIN? Reset PIN Lock** on the unlock screen.
+
+## Privacy
+
+- boomrng works locally in the browser.
+- Block lists, timers, PIN lock, redirect URL, and max-tab settings are stored with Chrome extension storage.
+- No account, analytics, or server sync is built into this version.
