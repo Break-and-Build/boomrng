@@ -4,6 +4,10 @@ function isFeatureEnabled(data) {
     return data.enabled !== false;
 }
 
+function isLimitPageUrl(url) {
+    return typeof url === 'string' && url.includes('limit.html');
+}
+
 let ruleRefreshInFlight = null;
 let ruleRefreshQueued = false;
 const RULE_TIMER_ALARM = 'rules-refresh-timer';
@@ -67,7 +71,7 @@ async function updateBadge() {
 }
 
 // --- HELPER: The Enforcer (Shared Logic) ---
-async function enforceTabLimit(tab) {
+async function enforceTabLimit(tab, attemptedUrl = null) {
     const data = await chrome.storage.local.get(['maxTabs', 'enabled']);
     if (!isFeatureEnabled(data) || !data.maxTabs) return;
 
@@ -78,11 +82,18 @@ async function enforceTabLimit(tab) {
     // If we are OVER the limit
     if (tabs.length > maxTabs) {
         // 1. Check if we are already on the limit page (Prevent infinite loops)
-        if (tab.url && tab.url.includes("limit.html")) return;
+        if (isLimitPageUrl(tab.url) || isLimitPageUrl(attemptedUrl)) return;
 
         // 2. Redirect to the Wall
-        const limitPageUrl = chrome.runtime.getURL("src/limit.html");
-        if (tab?.id) chrome.tabs.update(tab.id, { url: limitPageUrl });
+        const limitPageUrl = new URL(chrome.runtime.getURL("src/limit.html"));
+        const pendingUrl = typeof attemptedUrl === 'string' && attemptedUrl.length > 0
+            ? attemptedUrl
+            : (typeof tab.url === 'string' && tab.url.length > 0 ? tab.url : null);
+
+        if (pendingUrl) {
+            limitPageUrl.searchParams.set('pending', pendingUrl);
+        }
+        if (tab?.id) chrome.tabs.update(tab.id, { url: limitPageUrl.toString() });
         console.log("boomrng: Limit enforcement triggered.");
     }
 }
@@ -145,14 +156,19 @@ async function refreshEnforcementRules() {
 // Trigger A: When a new tab is created
 chrome.tabs.onCreated.addListener(async (tab) => {
     await updateBadge();
-    await enforceTabLimit(tab);
+    const pendingUrl = typeof tab.pendingUrl === 'string' && tab.pendingUrl.length > 0
+        ? tab.pendingUrl
+        : (typeof tab.url === 'string' && tab.url.length > 0 ? tab.url : null);
+
+    if (!pendingUrl || pendingUrl === 'chrome://newtab/') return;
+    await enforceTabLimit(tab, pendingUrl);
 });
 
 // Trigger B: When a tab changes URL (The Loophole Fix!)
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     // Only check if the URL actually changed
     if (changeInfo.url) {
-        await enforceTabLimit(tab);
+        await enforceTabLimit(tab, changeInfo.url);
     }
 });
 
