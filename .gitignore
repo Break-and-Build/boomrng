@@ -1,3 +1,5 @@
 .DS_Store
 *.zip
 # STORE_SUBMISSION.md
+node_modules
+dist

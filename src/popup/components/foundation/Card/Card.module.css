@@ -1,0 +1,33 @@
+.card {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%;
+  text-align: left;
+}
+
+.interactive {
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.interactive:hover {
+  border-color: var(--accent);
+  background: rgba(0, 178, 66, 0.05);
+}
+
+.none {
+  padding: 0;
+}
+
+.sm {
+  padding: 12px;
+}
+
+.md {
+  padding: 16px;
+}
+
+.lg {
+  padding: 24px;
+}

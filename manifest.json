@@ -1,17 +1,17 @@
 {
   "manifest_version": 3,
   "name": "boomrng",
-  "version": "1.1.2",
-  "description": "Block distracting sites, enforce timed locks, and keep tab count under control.",
+  "version": "2.0.0",
+  "description": "Behavioral constraint system for intentional browsing",
   "permissions": ["storage", "tabs", "declarativeNetRequest", "alarms"],
   "host_permissions": ["<all_urls>"],
   "background": {
-    "service_worker": "src/background.js",
+    "service_worker": "dist/service-worker.js",
     "type": "module"
   },
   "action": {
     "default_title": "boomrng",
-    "default_popup": "src/popup.html",
+    "default_popup": "dist/src/popup/index.html",
     "default_icon": {
       "16": "images/icon-16.png",
       "48": "images/icon-48.png",
