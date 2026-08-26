@@ -6,8 +6,13 @@ let ruleRefreshInFlight: Promise<void> | null = null;
 let ruleRefreshQueued = false;
 const RULE_TIMER_ALARM = 'rules-refresh-timer';
 
-function isLimitPageUrl(url: string | undefined): boolean {
-  return typeof url === 'string' && url.includes('limit.html');
+function getExtensionId(): string {
+  return chrome.runtime.id;
+}
+
+function isEnforcementPageUrl(url: string | undefined): boolean {
+  if (typeof url !== 'string') return false;
+  return url.includes('enforcement/') && url.includes('index.html');
 }
 
 function computeNextTimerTransition(constraints: Constraint[], nowMs: number = Date.now()): number | null {
@@ -82,9 +87,10 @@ async function enforceTabLimit(tab: chrome.tabs.Tab, attemptedUrl?: string): Pro
   const tabs = await chrome.tabs.query({ currentWindow: true });
   if (tabs.length <= maxTabs) return;
 
-  if (isLimitPageUrl(tab.url) || isLimitPageUrl(attemptedUrl)) return;
+  if (isEnforcementPageUrl(tab.url) || isEnforcementPageUrl(attemptedUrl)) return;
 
-  const limitPageUrl = new URL(chrome.runtime.getURL('dist/enforcement/tabbudget/index.html'));
+  const extensionId = getExtensionId();
+  const limitPageUrl = new URL(`chrome-extension://${extensionId}/dist/src/enforcement/tabbudget/index.html`);
   const pendingUrl = attemptedUrl || tab.url;
   if (pendingUrl) {
     limitPageUrl.searchParams.set('pending', pendingUrl);
@@ -106,11 +112,8 @@ async function updateEnforcementRules(): Promise<void> {
     behavior: c.behavior,
   }));
 
-  const newRules = generateRules(
-    blockedSites,
-    settings.allowedSites,
-    settings.landingPage
-  );
+  const extensionId = getExtensionId();
+  const newRules = generateRules(blockedSites, settings.allowedSites, extensionId);
 
   await chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: currentRuleIds,
@@ -139,6 +142,21 @@ async function refreshEnforcementRules(): Promise<void> {
     ruleRefreshInFlight = null;
   }
 }
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type === 'VALIDATE_PIN') {
+    loadSettings().then((settings) => {
+      const isValid = settings.pin === message.pin;
+      sendResponse({ success: true, data: { valid: isValid } });
+    });
+    return true;
+  }
+
+  if (message.type === 'REQUEST_CONTINUE') {
+    sendResponse({ success: true });
+    return false;
+  }
+});
 
 chrome.storage.onChanged.addListener((_changes, namespace) => {
   if (namespace === 'local') {

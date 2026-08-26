@@ -35,17 +35,17 @@ export class ErrorBoundary extends React.Component<Props, State> {
           minHeight: '200px',
           textAlign: 'center',
         }}>
-          <h2 style={{ color: '#e0e0e0', marginBottom: '8px' }}>Something went wrong</h2>
-          <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '16px', fontSize: '13px' }}>
+          <h2 style={{ color: 'var(--text-primary)', marginBottom: '8px' }}>Something went wrong</h2>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '13px' }}>
             {this.state.error?.message || 'An unexpected error occurred'}
           </p>
           <button
             onClick={() => this.setState({ hasError: false, error: null })}
             style={{
-              background: '#00B242',
-              color: '#fff',
+              background: 'var(--accent)',
+              color: 'var(--text-on-accent)',
               border: 'none',
-              borderRadius: '8px',
+              borderRadius: '9px',
               padding: '8px 16px',
               cursor: 'pointer',
               fontSize: '14px',

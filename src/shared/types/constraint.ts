@@ -19,6 +19,13 @@ export interface Constraint {
   enforcedToday: number;
   lastEnforcedAt: number | null;
   progressiveDelay: ProgressiveDelayState | null;
+  /**
+   * Data-model groundwork for Private Constraints (BOOMRNG-V2-DESIGN-SPEC.md §26).
+   * Defaults to false and is normalized at load time in storage-service.ts so
+   * constraints saved before this field existed keep working. No reveal/PIN
+   * UI reads or sets this yet — that's a later milestone.
+   */
+  isPrivate: boolean;
 }
 
 export interface ScheduleConfig {

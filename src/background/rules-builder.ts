@@ -1,29 +1,8 @@
+import type { ConstraintBehavior } from '../shared/types/constraint';
+
 interface BlockedSite {
   url: string;
-  behavior: string;
-}
-
-function sanitizeUrl(url: string): string {
-  if (!url || typeof url !== 'string' || url.trim() === '') {
-    return 'https://github.com';
-  }
-
-  let cleanUrl = url.trim();
-
-  if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
-    cleanUrl = 'https://' + cleanUrl;
-  }
-
-  try {
-    const parsed = new URL(cleanUrl);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      throw new Error('Unsupported protocol');
-    }
-    return parsed.toString();
-  } catch {
-    console.warn('[boomrng] Invalid redirect URL provided. Using default.');
-    return 'https://github.com';
-  }
+  behavior: ConstraintBehavior;
 }
 
 function normalizeSitePattern(siteInput: string): string | null {
@@ -54,15 +33,33 @@ function normalizeSitePattern(siteInput: string): string | null {
   }
 }
 
+function getBehaviorPagePath(behavior: ConstraintBehavior): string {
+  switch (behavior) {
+    case 'checkpoint':
+      return 'src/enforcement/checkpoint/index.html';
+    case 'delay':
+    case 'progressive-delay':
+      return 'src/enforcement/delay/index.html';
+    case 'hard-block':
+      return 'src/enforcement/block/index.html';
+    case 'pin-required':
+      return 'src/enforcement/pin/index.html';
+    case 'reflection':
+    case 'custom-message':
+    case 'scheduled':
+      return 'src/enforcement/checkpoint/index.html';
+    default:
+      return 'src/enforcement/block/index.html';
+  }
+}
+
 export function generateRules(
   blockedSites: BlockedSite[],
   allowedSites: string[],
-  fallbackUrl: string
+  extensionId: string
 ): chrome.declarativeNetRequest.Rule[] {
   const rules: chrome.declarativeNetRequest.Rule[] = [];
   let idCounter = 1;
-
-  const validRedirect = sanitizeUrl(fallbackUrl);
 
   const normalizedAllowSites = new Set<string>();
   for (const site of allowedSites) {
@@ -84,24 +81,29 @@ export function generateRules(
     });
   }
 
-  const normalizedBlockedSites = new Set<string>();
+  const blockedByBehavior = new Map<string, { normalizedSite: string; behavior: ConstraintBehavior }>();
+
   for (const site of blockedSites) {
     const normalizedSite = normalizeSitePattern(site.url);
     if (!normalizedSite) continue;
     if (normalizedAllowSites.has(normalizedSite)) continue;
-    normalizedBlockedSites.add(normalizedSite);
+    blockedByBehavior.set(normalizedSite, { normalizedSite, behavior: site.behavior });
   }
 
-  for (const site of normalizedBlockedSites) {
+  for (const [, { normalizedSite, behavior }] of blockedByBehavior) {
+    const pagePath = getBehaviorPagePath(behavior);
+    const domain = normalizedSite.replace(/^\|\|/, '').split('/')[0];
+    const redirectUrl = `chrome-extension://${extensionId}/dist/${pagePath}?domain=${encodeURIComponent(domain)}&behavior=${encodeURIComponent(behavior)}`;
+
     rules.push({
       id: idCounter++,
       priority: 1,
       action: {
         type: chrome.declarativeNetRequest.RuleActionType.REDIRECT,
-        redirect: { url: validRedirect },
+        redirect: { url: redirectUrl },
       },
       condition: {
-        urlFilter: site,
+        urlFilter: normalizedSite,
         resourceTypes: [chrome.declarativeNetRequest.ResourceType.MAIN_FRAME],
       },
     });

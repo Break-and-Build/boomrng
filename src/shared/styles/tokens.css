@@ -1,0 +1,67 @@
+/* Boomrng V2 design tokens — single source of truth for both the popup
+   and the enforcement pages. Values from BOOMRNG-V2-DESIGN-SPEC.md §5–7. */
+
+:root {
+  /* Surfaces */
+  --canvas: #0A2119;
+  --surface: #102A21;
+  --card: #14332A;
+  --surface-subtle: #0D251E;
+
+  /* Borders */
+  --border: #1E3A30;
+  --border-strong: #2C5244;
+
+  /* Text */
+  --text-primary: #EEF5F1;
+  --text-secondary: #9EB3AA;
+  --text-muted: #6C8179;
+
+  /* Accent */
+  --accent: #2BBE6E;
+  --accent-hover: #3ED17F;
+  --text-on-accent: #062318;
+  --focus-ring: rgba(43, 190, 110, 0.55);
+
+  /* Semantic */
+  --success: #2BBE6E;
+  --warning: #E3A53D;
+  --destructive: #E0555A;
+  --info: #4F9CDB;
+
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --text-title: 17px;
+  --text-heading: 13px;
+  --text-body: 14px;
+  --text-body-secondary: 13px;
+  --text-label: 12px;
+  --text-meta: 11px;
+  --text-button: 14px;
+
+  /* Spacing (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Radius — inputs/chips stay tight, buttons sit a step up, containers a step further */
+  --radius-sm: 6px;
+  --radius-control: 9px;
+  --radius-md: 10px;
+
+  /* Control sizing */
+  --control-height: 36px;
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-normal: 140ms;
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+}

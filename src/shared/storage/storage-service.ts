@@ -31,9 +31,15 @@ export async function saveSettings(settings: Settings): Promise<boolean> {
   }
 }
 
+type StoredConstraint = Omit<Constraint, 'isPrivate'> & { isPrivate?: boolean };
+
 export async function loadConstraints(): Promise<Constraint[]> {
   const data = await chrome.storage.local.get(STORAGE_KEYS.CONSTRAINTS);
-  return data[STORAGE_KEYS.CONSTRAINTS] || [];
+  const constraints: StoredConstraint[] = data[STORAGE_KEYS.CONSTRAINTS] || [];
+  // Backwards compatibility: constraints saved before `isPrivate` existed
+  // won't have the field. Normalize once here rather than defaulting it
+  // everywhere the field is read.
+  return constraints.map((c) => ({ ...c, isPrivate: c.isPrivate ?? false }));
 }
 
 export async function saveConstraints(constraints: Constraint[]): Promise<boolean> {

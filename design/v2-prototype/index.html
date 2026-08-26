@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boomrng V2 — Visual Prototype</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============================= ICON SPRITE ============================= -->
+<svg style="display:none">
+  <defs>
+    <symbol id="i-mark-a" viewBox="0 0 32 32"><path d="M23 8 A12 12 0 1 1 8.5 22.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></symbol>
+    <symbol id="i-mark-b" viewBox="0 0 32 32"><path d="M16 4 A12 12 0 1 1 6 10" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-mark-c" viewBox="0 0 32 32"><path d="M7 24 C 7 15, 11 9, 20 6 M20 6 C 23.5 7.6, 25.5 9.8, 26 12" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+
+    <symbol id="i-dashboard" viewBox="0 0 20 20"><g fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="6" height="6" rx="1.3"/><rect x="11" y="3" width="6" height="6" rx="1.3"/><rect x="3" y="11" width="6" height="6" rx="1.3"/><rect x="11" y="11" width="6" height="6" rx="1.3"/></g></symbol>
+    <symbol id="i-sites" viewBox="0 0 20 20"><g fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="7"/><ellipse cx="10" cy="10" rx="3.1" ry="7"/><line x1="3.2" y1="10" x2="16.8" y2="10"/></g></symbol>
+    <symbol id="i-settings" viewBox="0 0 20 20"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="10" cy="10" r="2.6"/><path d="M10 3.3v2.1M10 14.6v2.1M16.7 10h-2.1M5.4 10H3.3M14.9 5.1l-1.5 1.5M6.6 13.4l-1.5 1.5M14.9 14.9l-1.5-1.5M6.6 6.6L5.1 5.1"/></g></symbol>
+
+    <symbol id="i-checkpoint" viewBox="0 0 20 20"><g fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14.7 6.2A6 6 0 1 1 6 4" stroke-linecap="round"/><circle cx="14.8" cy="6.1" r="1" fill="currentColor" stroke="none"/></g></symbol>
+    <symbol id="i-delay" viewBox="0 0 20 20"><path d="M16 10.6A6 6 0 1 1 9.7 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 20 20"><g fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="9" width="10" height="7" rx="1.6"/><path d="M7 9V6.6a3 3 0 0 1 6 0V9"/></g></symbol>
+    <symbol id="i-hardblock" viewBox="0 0 20 20"><g fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="6.4"/><line x1="5.6" y1="10" x2="14.4" y2="10"/></g></symbol>
+    <symbol id="i-tabbudget" viewBox="0 0 20 20"><g fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="7" width="10.5" height="8" rx="1.6"/><path d="M6 7V5.4A1.4 1.4 0 0 1 7.4 4h6.2A1.4 1.4 0 0 1 15 5.4V12" /></g></symbol>
+    <symbol id="i-add" viewBox="0 0 20 20"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="10" y1="4.5" x2="10" y2="15.5"/><line x1="4.5" y1="10" x2="15.5" y2="10"/></g></symbol>
+    <symbol id="i-edit" viewBox="0 0 20 20"><path d="M4.5 15.5L5.3 12l8-8 2.7 2.7-8 8-3.5.8z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
+    <symbol id="i-delete" viewBox="0 0 20 20"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h10M8 6V4.6a1.3 1.3 0 0 1 1.3-1.3h1.4A1.3 1.3 0 0 1 12 4.6V6"/><path d="M6.3 6v9a1 1 0 0 0 1 1h5.4a1 1 0 0 0 1-1V6"/></g></symbol>
+    <symbol id="i-export" viewBox="0 0 20 20"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v8.4"/><path d="M6.6 7.4L10 4l3.4 3.4"/><path d="M4.2 13.4v1.9A1.4 1.4 0 0 0 5.6 16.7h8.8a1.4 1.4 0 0 0 1.4-1.4v-1.9"/></g></symbol>
+    <symbol id="i-import" viewBox="0 0 20 20"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v8.4"/><path d="M6.6 9L10 12.4 13.4 9"/><path d="M4.2 13.4v1.9A1.4 1.4 0 0 0 5.6 16.7h8.8a1.4 1.4 0 0 0 1.4-1.4v-1.9"/></g></symbol>
+    <symbol id="i-lock-mini" viewBox="0 0 20 20"><g fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5.5" y="9" width="9" height="6.5" rx="1.3"/><path d="M7.3 9V6.8a2.7 2.7 0 0 1 5.4 0V9"/></g></symbol>
+    <symbol id="i-close" viewBox="0 0 20 20"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="5.5" y1="5.5" x2="14.5" y2="14.5"/><line x1="14.5" y1="5.5" x2="5.5" y2="14.5"/></g></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+
+  <header class="topbar">
+    <svg class="mark"><use href="#i-mark-a"/></svg>
+    <span class="title">Boomrng V2 — Visual Prototype</span>
+    <span class="subtitle">design/v2-prototype — not the production extension</span>
+    <span class="flag">mock data · no build step</span>
+  </header>
+
+  <nav class="sidebar" id="sidebar">
+    <h3>Popup</h3>
+    <button class="nav-item" data-target="dashboard-populated">Dashboard — populated</button>
+    <button class="nav-item" data-target="dashboard-empty">Dashboard — empty</button>
+    <button class="nav-item" data-target="sites">Sites</button>
+    <button class="nav-item" data-target="add-constraint">Add Constraint</button>
+    <button class="nav-item" data-target="settings-no-pin">Settings — no PIN</button>
+    <button class="nav-item" data-target="settings-pin-set">Settings — PIN set</button>
+
+    <h3>Enforcement</h3>
+    <button class="nav-item" data-target="checkpoint">Checkpoint</button>
+    <button class="nav-item" data-target="delay">Delay</button>
+    <button class="nav-item" data-target="pin">PIN Required</button>
+    <button class="nav-item" data-target="hard-block">Hard Block</button>
+    <button class="nav-item" data-target="tab-budget">Tab Budget</button>
+
+    <h3>Overview</h3>
+    <button class="nav-item" data-target="compare">Comparison board</button>
+
+    <h3>Brand</h3>
+    <button class="nav-item" data-target="brand">Brand exploration</button>
+  </nav>
+
+  <main class="content" id="content">
+
+    <!-- ============================= DASHBOARD — POPULATED ============================= -->
+    <section class="screen" data-screen="dashboard-populated">
+      <div class="screen-head">
+        <div class="eyebrow">Popup · Screen 1</div>
+        <h1>Dashboard — populated</h1>
+        <p>Everything a returning user needs is visible without scrolling: status, what's currently constrained, and tab budget. No history, no charts.</p>
+      </div>
+      <div class="stage">
+        <div class="popup-device">
+          <div class="chrome-bar"><div class="dots"><span></span><span></span><span></span></div><div class="ext-icon"><svg><use href="#i-mark-a"/></svg></div></div>
+          <div class="popup-shell">
+            <div class="popup-header">
+              <svg class="mark"><use href="#i-mark-a"/></svg>
+              <span class="wordmark">boomrng</span>
+              <span class="status-dot active" title="Active"></span>
+            </div>
+            <div class="popup-body">
+              <p class="status-line">5 constraints active</p>
+              <div class="list-group">
+                <div class="row">
+                  <div class="main">
+                    <span class="domain">youtube.com</span>
+                    <div class="meta"><span class="badge b-checkpoint"><svg><use href="#i-checkpoint"/></svg>Checkpoint</span></div>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="main">
+                    <span class="domain">reddit.com</span>
+                    <div class="meta"><span class="badge b-delay"><svg><use href="#i-delay"/></svg>Delay</span></div>
+                  </div>
+                  <span class="state">12m left</span>
+                </div>
+                <button class="private-summary-row" onclick="Proto.go('sites')">
+                  <svg><use href="#i-lock-mini"/></svg>
+                  <span>3 private constraints</span>
+                  <span class="chevron">›</span>
+                </button>
+              </div>
+              <div class="card">
+                <div class="card-title">Tab Budget</div>
+                <div class="tab-budget-row">
+                  <div class="ring-wrap">
+                    <svg width="44" height="44" viewBox="0 0 44 44" class="ring">
+                      <circle cx="22" cy="22" r="18" fill="none" stroke="var(--border)" stroke-width="4.5"/>
+                      <circle cx="22" cy="22" r="18" fill="none" stroke="var(--warning)" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="113.1" stroke-dashoffset="33.9"/>
+                    </svg>
+                  </div>
+                  <div class="figures">
+                    <div class="n">7 of 10</div>
+                    <div class="hint">3 tabs to spare</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="popup-nav">
+              <div class="item is-active"><svg><use href="#i-dashboard"/></svg>Dashboard</div>
+              <div class="item"><svg><use href="#i-sites"/></svg>Sites</div>
+              <div class="item"><svg><use href="#i-settings"/></svg>Settings</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================= DASHBOARD — EMPTY ============================= -->
+    <section class="screen" data-screen="dashboard-empty">
+      <div class="screen-head">
+        <div class="eyebrow">Popup · Screen 2</div>
+        <h1>Dashboard — empty (first install)</h1>
+        <p>This empty state is the entirety of Boomrng's onboarding. No tour, no wizard — one sentence and one button.</p>
+      </div>
+      <div class="stage">
+        <div class="popup-device">
+          <div class="chrome-bar"><div class="dots"><span></span><span></span><span></span></div><div class="ext-icon"><svg><use href="#i-mark-a"/></svg></div></div>
+          <div class="popup-shell">
+            <div class="popup-header">
+              <svg class="mark"><use href="#i-mark-a"/></svg>
+              <span class="wordmark">boomrng</span>
+              <span class="status-dot inactive" title="No constraints yet"></span>
+            </div>
+            <div class="popup-body">
+              <div class="empty-state" style="padding-top:64px;">
+                <svg class="glyph"><use href="#i-sites"/></svg>
+                <h2>Nothing constrained yet.</h2>
+                <p>Add a site you want a pause before opening.</p>
+                <button class="btn-primary" style="width:auto;padding:9px 18px;" onclick="Proto.go('add-constraint')">Add your first constraint</button>
+              </div>
+            </div>
+            <div class="popup-nav">
+              <div class="item is-active"><svg><use href="#i-dashboard"/></svg>Dashboard</div>
+              <div class="item"><svg><use href="#i-sites"/></svg>Sites</div>
+              <div class="item"><svg><use href="#i-settings"/></svg>Settings</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================= SITES ============================= -->
+    <section class="screen" data-screen="sites">
+      <div class="screen-head">
+        <div class="eyebrow">Popup · Screen 3 — interactive</div>
+        <h1>Sites</h1>
+        <p>Flat rows in one bordered group. The header's "+" is icon-only now that constraints exist — the empty state (see "Dashboard — empty" for the pattern) uses a full labeled button instead, and a screen never shows both at once. Private constraints show "Private site" instead of a domain until unlocked with your PIN — deleting one never requires unlocking; editing one does. Try the reveal bar and the PIN-scenario toggle below.</p>
+      </div>
+      <div class="stage">
+        <div class="popup-device">
+          <div class="chrome-bar"><div class="dots"><span></span><span></span><span></span></div><div class="ext-icon"><svg><use href="#i-mark-a"/></svg></div></div>
+          <div class="popup-shell">
+            <div class="popup-header">
+              <svg class="mark"><use href="#i-mark-a"/></svg>
+              <span class="wordmark">boomrng</span>
+              <span class="status-dot active"></span>
+            </div>
+            <div class="popup-body">
+              <div class="top-row">
+                <h1>Sites</h1>
+                <button class="icon-btn-accent" onclick="Proto.go('add-constraint')" aria-label="Add constraint" title="Add constraint"><svg><use href="#i-add"/></svg></button>
+              </div>
+
+              <div class="reveal-bar" id="reveal-bar">
+                <div class="reveal-locked" id="reveal-locked-msg">
+                  <svg><use href="#i-lock-mini"/></svg>
+                  <span>3 private constraints are hidden.</span>
+                  <button class="btn-ghost-inline" onclick="Proto.privacy.promptUnlock()">Unlock</button>
+                </div>
+                <div class="reveal-pin-entry" id="reveal-pin-entry" style="display:none;">
+                  <input class="input mono" id="reveal-pin-input" type="password" maxlength="6" placeholder="Enter PIN">
+                  <button class="btn-ghost-inline" onclick="Proto.privacy.attemptUnlock()">Unlock</button>
+                </div>
+                <div class="reveal-unlocked" id="reveal-unlocked-msg" style="display:none;">
+                  <svg><use href="#i-lock-mini"/></svg>
+                  <span>Private constraints unlocked for this session.</span>
+                  <button class="btn-ghost-inline" onclick="Proto.privacy.lock()">Lock again</button>
+                </div>
+                <div class="reveal-no-pin" id="reveal-no-pin-msg" style="display:none;">
+                  <svg><use href="#i-lock-mini"/></svg>
+                  <span>Set a PIN in Settings to unlock private constraints.</span>
+                </div>
+              </div>
+
+              <div class="list-group" id="sites-list">
+                <div class="row">
+                  <div class="main">
+                    <span class="domain">youtube.com</span>
+                    <div class="meta"><span class="badge b-checkpoint"><svg><use href="#i-checkpoint"/></svg>Checkpoint</span></div>
+                  </div>
+                  <div class="row-actions">
+                    <button class="icon-btn" onclick="Proto.privacy.editRow(this)"><svg><use href="#i-edit"/></svg></button>
+                    <button class="icon-btn danger" onclick="Proto.privacy.deleteRow(this)"><svg><use href="#i-delete"/></svg></button>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="main">
+                    <span class="domain">reddit.com</span>
+                    <div class="meta"><span class="badge b-delay"><svg><use href="#i-delay"/></svg>Delay · 15 min</span></div>
+                    <div class="reason-line">"I said I'd write, not scroll."</div>
+                  </div>
+                  <div class="row-actions">
+                    <button class="icon-btn" onclick="Proto.privacy.editRow(this)"><svg><use href="#i-edit"/></svg></button>
+                    <button class="icon-btn danger" onclick="Proto.privacy.deleteRow(this)"><svg><use href="#i-delete"/></svg></button>
+                  </div>
+                </div>
+                <div class="row" data-private="true" data-real-domain="pokerstars.com">
+                  <div class="main">
+                    <span class="domain is-private"><svg class="lock-mini"><use href="#i-lock-mini"/></svg>Private site</span>
+                    <div class="meta"><span class="badge b-hardblock"><svg><use href="#i-hardblock"/></svg>Hard Block</span></div>
+                  </div>
+                  <div class="row-actions">
+                    <button class="icon-btn" onclick="Proto.privacy.editRow(this)"><svg><use href="#i-edit"/></svg></button>
+                    <button class="icon-btn danger" onclick="Proto.privacy.deleteRow(this)"><svg><use href="#i-delete"/></svg></button>
+                  </div>
+                </div>
+                <div class="row" data-private="true" data-real-domain="hinge.co">
+                  <div class="main">
+                    <span class="domain is-private"><svg class="lock-mini"><use href="#i-lock-mini"/></svg>Private site</span>
+                    <div class="meta"><span class="badge b-pin"><svg><use href="#i-pin"/></svg>PIN Required</span></div>
+                  </div>
+                  <div class="row-actions">
+                    <button class="icon-btn" onclick="Proto.privacy.editRow(this)"><svg><use href="#i-edit"/></svg></button>
+                    <button class="icon-btn danger" onclick="Proto.privacy.deleteRow(this)"><svg><use href="#i-delete"/></svg></button>
+                  </div>
+                </div>
+                <div class="row" data-private="true" data-real-domain="webmd.com">
+                  <div class="main">
+                    <span class="domain is-private"><svg class="lock-mini"><use href="#i-lock-mini"/></svg>Private site</span>
+                    <div class="meta"><span class="badge b-delay"><svg><use href="#i-delay"/></svg>Delay · 20 min</span></div>
+                  </div>
+                  <div class="row-actions">
+                    <button class="icon-btn" onclick="Proto.privacy.editRow(this)"><svg><use href="#i-edit"/></svg></button>
+                    <button class="icon-btn danger" onclick="Proto.privacy.deleteRow(this)"><svg><use href="#i-delete"/></svg></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="popup-nav">
+              <div class="item"><svg><use href="#i-dashboard"/></svg>Dashboard</div>
+              <div class="item is-active"><svg><use href="#i-sites"/></svg>Sites</div>
+              <div class="item"><svg><use href="#i-settings"/></svg>Settings</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="demo-toggle">
+        <div class="demo-label">Prototype control — not part of the product UI</div>
+        <div class="demo-toggle-row">
+          <button class="demo-btn is-active" data-pin-scenario="yes" onclick="Proto.privacy.setPinScenario(true)">PIN configured</button>
+          <button class="demo-btn" data-pin-scenario="no" onclick="Proto.privacy.setPinScenario(false)">No PIN set</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================= ADD CONSTRAINT ============================= -->
+    <section class="screen" data-screen="add-constraint">
+      <div class="screen-head">
+        <div class="eyebrow">Popup · Screen 4 — interactive</div>
+        <h1>Add Constraint — revised</h1>
+        <p>Compact accordion instead of four large cards: only the selected behavior expands to show its description and configuration. No footer Cancel — the panel's own header carries a <code>×</code> close instead, and the primary action is compact, text-labeled, and alone.</p>
+      </div>
+      <div class="stage">
+        <div class="popup-device">
+          <div class="chrome-bar"><div class="dots"><span></span><span></span><span></span></div><div class="ext-icon"><svg><use href="#i-mark-a"/></svg></div></div>
+          <div class="popup-shell">
+            <div class="popup-header">
+              <svg class="mark"><use href="#i-mark-a"/></svg>
+              <span class="wordmark">boomrng</span>
+            </div>
+            <div class="popup-body" id="ac-root">
+              <div class="panel-header">
+                <span class="panel-title">Add constraint</span>
+                <button class="icon-btn" aria-label="Close" title="Close" onclick="Proto.go('sites')"><svg><use href="#i-close"/></svg></button>
+              </div>
+              <div class="field">
+                <label for="ac-domain">Domain</label>
+                <input class="input mono" id="ac-domain" type="text" value="youtube.com" placeholder="twitter.com">
+              </div>
+
+              <label class="privacy-toggle">
+                <input type="checkbox" id="ac-private" onclick="Proto.ac.togglePrivate(this.checked)">
+                <span class="ptoggle-box"></span>
+                <span>
+                  <span class="ptoggle-title">Private constraint</span>
+                  <span class="ptoggle-hint">Hides the domain in Boomrng's own screens until you unlock it with your PIN. Not encrypted.</span>
+                </span>
+              </label>
+              <div class="b-warning" id="ac-private-warning" style="display:none;margin:-8px 0 16px;">You haven't set a PIN yet — this will stay masked, but anyone can unlock it without one. <a onclick="Proto.go('settings-no-pin')">Set a PIN in Settings</a>.</div>
+
+              <div class="field">
+                <label>Behavior</label>
+                <div class="behavior-list" role="radiogroup" id="ac-behaviors">
+
+                  <div class="behavior-row is-selected" data-behavior="checkpoint" onclick="Proto.ac.select('checkpoint')">
+                    <div class="row-top">
+                      <span class="radio"></span>
+                      <svg class="b-icon"><use href="#i-checkpoint"/></svg>
+                      <span class="b-name">Checkpoint</span>
+                      <span class="b-friction"><span class="on"></span><span></span><span></span><span></span></span>
+                    </div>
+                    <div class="b-expand"><p class="b-desc">A quick pause before opening the site.</p></div>
+                  </div>
+
+                  <div class="behavior-row" data-behavior="delay" onclick="Proto.ac.select('delay')">
+                    <div class="row-top">
+                      <span class="radio"></span>
+                      <svg class="b-icon"><use href="#i-delay"/></svg>
+                      <span class="b-name">Delay</span>
+                      <span class="b-friction"><span class="on"></span><span class="on"></span><span></span><span></span></span>
+                    </div>
+                    <div class="b-expand">
+                      <p class="b-desc">Wait for a time you choose before you can continue.</p>
+                      <div class="b-config-inline">
+                        <span class="mini-label">Duration</span>
+                        <div class="stepper">
+                          <button type="button" onclick="event.stopPropagation();Proto.ac.stepDelay(-5)">−</button>
+                          <span class="val" id="ac-delay-val">15 min</span>
+                          <button type="button" onclick="event.stopPropagation();Proto.ac.stepDelay(5)">+</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="behavior-row" data-behavior="pin" onclick="Proto.ac.select('pin')">
+                    <div class="row-top">
+                      <span class="radio"></span>
+                      <svg class="b-icon"><use href="#i-pin"/></svg>
+                      <span class="b-name">PIN Required</span>
+                      <span class="b-friction"><span class="on"></span><span class="on"></span><span class="on"></span><span></span></span>
+                    </div>
+                    <div class="b-expand">
+                      <p class="b-desc">Enter your Boomrng PIN before continuing.</p>
+                      <div class="b-warning">You haven't set a PIN yet — <a onclick="event.stopPropagation();Proto.go('settings-no-pin')">set one in Settings first</a>.</div>
+                    </div>
+                  </div>
+
+                  <div class="behavior-row" data-behavior="hardblock" onclick="Proto.ac.select('hardblock')">
+                    <div class="row-top">
+                      <span class="radio"></span>
+                      <svg class="b-icon"><use href="#i-hardblock"/></svg>
+                      <span class="b-name">Hard Block</span>
+                      <span class="b-friction"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span></span>
+                    </div>
+                    <div class="b-expand"><p class="b-desc">No access while this constraint is active.</p></div>
+                  </div>
+
+                </div>
+              </div>
+
+              <div class="field" id="ac-reason-field">
+                <label for="ac-reason">Remind yourself why <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+                <input class="input" id="ac-reason" type="text" value="I said I'd write, not scroll.">
+              </div>
+
+              <div class="form-actions">
+                <button class="btn-primary" style="width:auto;" onclick="Proto.go('sites')">Add constraint</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================= SETTINGS — NO PIN ============================= -->
+    <section class="screen" data-screen="settings-no-pin">
+      <div class="screen-head">
+        <div class="eyebrow">Popup · Screen 5</div>
+        <h1>Settings — no PIN set</h1>
+        <p>Four sections, nothing more. Strict Mode, Landing Page, and override-limit fields from the current build are gone — they didn't do anything.</p>
+      </div>
+      <div class="stage">
+        <div class="popup-device">
+          <div class="chrome-bar"><div class="dots"><span></span><span></span><span></span></div><div class="ext-icon"><svg><use href="#i-mark-a"/></svg></div></div>
+          <div class="popup-shell">
+            <div class="popup-header"><svg class="mark"><use href="#i-mark-a"/></svg><span class="wordmark">boomrng</span></div>
+            <div class="popup-body">
+              <h1 style="font-size:15px;margin:0 0 18px;">Settings</h1>
+
+              <div class="settings-section">
+                <div class="card-title">PIN <span class="settings-status">No PIN set</span></div>
+                <p class="desc">Protects PIN-required sites, and stops someone else from clearing your constraints.</p>
+                <div class="field" style="margin-bottom:10px;">
+                  <label>New PIN</label>
+                  <input class="input mono" type="password" placeholder="••••" maxlength="6">
+                </div>
+                <div class="field" style="margin-bottom:12px;">
+                  <label>Confirm PIN</label>
+                  <input class="input mono" type="password" placeholder="••••" maxlength="6">
+                </div>
+                <button class="btn-secondary" style="width:100%;" onclick="Proto.go('settings-pin-set')">Set PIN</button>
+              </div>
+
+              <div class="settings-section">
+                <div class="card-title">Tab Budget</div>
+                <div class="stepper"><button>−</button><span class="val">10 tabs</span><button>+</button></div>
+                <p class="desc" style="margin-top:8px;">Set to 0 for no limit.</p>
+              </div>
+
+              <div class="settings-section">
+                <div class="card-title">Data</div>
+                <div style="display:flex;gap:8px;">
+                  <button class="btn-secondary" style="flex:1;justify-content:center;display:flex;align-items:center;gap:6px;"><svg style="width:13px;height:13px;"><use href="#i-export"/></svg>Export</button>
+                  <button class="btn-secondary" style="flex:1;justify-content:center;display:flex;align-items:center;gap:6px;"><svg style="width:13px;height:13px;"><use href="#i-import"/></svg>Import</button>
+                </div>
+              </div>
+
+              <div class="settings-section">
+                <div class="card-title">About</div>
+                <p class="desc">boomrng v2.0 — Everything stays on this device. No accounts, no analytics, no sync.</p>
+              </div>
+            </div>
+            <div class="popup-nav">
+              <div class="item"><svg><use href="#i-dashboard"/></svg>Dashboard</div>
+              <div class="item"><svg><use href="#i-sites"/></svg>Sites</div>
+              <div class="item is-active"><svg><use href="#i-settings"/></svg>Settings</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================= SETTINGS — PIN SET ============================= -->
+    <section class="screen" data-screen="settings-pin-set">
+      <div class="screen-head">
+        <div class="eyebrow">Popup · Screen 6</div>
+        <h1>Settings — PIN configured</h1>
+        <p>Once a PIN exists, changing or clearing it requires the current PIN first — a small but deliberate change from the current build, which lets anyone overwrite it silently.</p>
+      </div>
+      <div class="stage">
+        <div class="popup-device">
+          <div class="chrome-bar"><div class="dots"><span></span><span></span><span></span></div><div class="ext-icon"><svg><use href="#i-mark-a"/></svg></div></div>
+          <div class="popup-shell">
+            <div class="popup-header"><svg class="mark"><use href="#i-mark-a"/></svg><span class="wordmark">boomrng</span></div>
+            <div class="popup-body">
+              <h1 style="font-size:15px;margin:0 0 18px;">Settings</h1>
+
+              <div class="settings-section">
+                <div class="card-title">PIN <span class="settings-status on">Protection is on</span></div>
+                <div class="pin-dots"><span></span><span></span><span></span><span></span></div>
+                <div style="display:flex;gap:8px;">
+                  <button class="btn-secondary" style="flex:1;">Change PIN</button>
+                  <button class="btn-secondary" style="flex:1;color:var(--destructive);">Clear PIN</button>
+                </div>
+              </div>
+
+              <div class="settings-section">
+                <div class="card-title">Tab Budget</div>
+                <div class="stepper"><button>−</button><span class="val">10 tabs</span><button>+</button></div>
+                <p class="desc" style="margin-top:8px;">Set to 0 for no limit.</p>
+              </div>
+
+              <div class="settings-section">
+                <div class="card-title">Data</div>
+                <div style="display:flex;gap:8px;">
+                  <button class="btn-secondary" style="flex:1;justify-content:center;display:flex;align-items:center;gap:6px;"><svg style="width:13px;height:13px;"><use href="#i-export"/></svg>Export</button>
+                  <button class="btn-secondary" style="flex:1;justify-content:center;display:flex;align-items:center;gap:6px;"><svg style="width:13px;height:13px;"><use href="#i-import"/></svg>Import</button>
+                </div>
+              </div>
+
+              <div class="settings-section">
+                <div class="card-title">About</div>
+                <p class="desc">boomrng v2.0 — Everything stays on this device. No accounts, no analytics, no sync.</p>
+              </div>
+            </div>
+            <div class="popup-nav">
+              <div class="item"><svg><use href="#i-dashboard"/></svg>Dashboard</div>
+              <div class="item"><svg><use href="#i-sites"/></svg>Sites</div>
+              <div class="item is-active"><svg><use href="#i-settings"/></svg>Settings</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================= CHECKPOINT ============================= -->
+    <section class="screen" data-screen="checkpoint">
+      <div class="screen-head">
+        <div class="eyebrow">Enforcement · Signature interaction</div>
+        <h1>Checkpoint</h1>
+        <p>The primary, filled button pulls the user back to work. "Continue anyway" is a plain text link — it must never visually compete with the return action. Toggle below to see the private-constraint variant: no domain, no personal reason, generic wording.</p>
+      </div>
+      <div class="stage">
+        <div class="browser-device">
+          <div class="browser-chrome"><div class="dots"><span></span><span></span><span></span></div><div class="url-pill"><svg><use href="#i-lock-mini"/></svg>youtube.com</div></div>
+          <div class="page-canvas">
+            <div class="enf">
+              <svg class="glyph"><use href="#i-checkpoint"/></svg>
+              <div class="domain-chip" id="cp-chip">youtube.com</div>
+              <h1 id="cp-h1">You were heading to youtube.com.</h1>
+              <p class="sub">Is that what you meant to do?</p>
+              <div class="reason" id="cp-reason"><b>You told yourself</b>"I opened this to search for something, not keep watching."</div>
+              <div class="enf-actions">
+                <button class="btn btn-primary">Back to what I was doing</button>
+                <button class="link-btn" id="cp-continue">Continue to youtube.com anyway</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="demo-toggle">
+        <div class="demo-label">Prototype control — not part of the product UI</div>
+        <div class="demo-toggle-row">
+          <button class="demo-btn is-active" data-group="cp-mode" data-mode="normal" onclick="Proto.privacyDemo.checkpoint('normal')">Normal constraint</button>
+          <button class="demo-btn" data-group="cp-mode" data-mode="private" onclick="Proto.privacyDemo.checkpoint('private')">Private constraint</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================= DELAY ============================= -->
+    <section class="screen" data-screen="delay">
+      <div class="screen-head">
+        <div class="eyebrow">Enforcement</div>
+        <h1>Delay</h1>
+        <p>The closing arc — not a giant digital clock — represents elapsed time. No disabled "Continue" button taunts the user during the wait; it only appears once the delay is actually over. Use the toggle below to compare active vs. complete.</p>
+      </div>
+      <div class="stage">
+        <div class="browser-device">
+          <div class="browser-chrome"><div class="dots"><span></span><span></span><span></span></div><div class="url-pill"><svg><use href="#i-lock-mini"/></svg>reddit.com</div></div>
+          <div class="page-canvas">
+            <div class="enf" id="delay-root">
+              <div class="domain-chip" id="dl-chip">reddit.com</div>
+              <svg width="112" height="112" viewBox="0 0 112 112" class="ring" style="margin-bottom:18px;">
+                <circle cx="56" cy="56" r="48" fill="none" stroke="var(--border)" stroke-width="5"/>
+                <circle id="delay-ring-fill" cx="56" cy="56" r="48" fill="none" stroke="var(--accent)" stroke-width="5" stroke-linecap="round" stroke-dasharray="301.6" stroke-dashoffset="241.3"/>
+              </svg>
+              <div id="delay-readout" style="font-family:var(--font-mono);font-size:24px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">12 min</div>
+              <p class="sub" id="delay-sub">remaining · this will be ready shortly.</p>
+              <div class="enf-actions">
+                <button class="btn btn-primary">Back to what I was doing</button>
+                <button class="link-btn" id="delay-continue" style="display:none;">Continue to reddit.com</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="demo-toggle">
+        <div class="demo-label">Prototype control — not part of the product UI</div>
+        <div class="demo-toggle-row">
+          <button class="demo-btn is-active" data-delay-state="active" onclick="Proto.delay.set('active')">Active — 12 min remaining</button>
+          <button class="demo-btn" data-delay-state="complete" onclick="Proto.delay.set('complete')">Complete</button>
+        </div>
+        <div class="demo-toggle-row" style="margin-top:8px;">
+          <button class="demo-btn is-active" data-group="dl-mode" data-mode="normal" onclick="Proto.privacyDemo.delay('normal')">Normal constraint</button>
+          <button class="demo-btn" data-group="dl-mode" data-mode="private" onclick="Proto.privacyDemo.delay('private')">Private constraint</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================= PIN ============================= -->
+    <section class="screen" data-screen="pin">
+      <div class="screen-head">
+        <div class="eyebrow">Enforcement</div>
+        <h1>PIN Required</h1>
+        <p>Single masked field, auto-focused. Use the control below to see the error state — an incorrect PIN is never a dead end.</p>
+      </div>
+      <div class="stage">
+        <div class="browser-device">
+          <div class="browser-chrome"><div class="dots"><span></span><span></span><span></span></div><div class="url-pill"><svg><use href="#i-lock-mini"/></svg>instagram.com</div></div>
+          <div class="page-canvas">
+            <div class="enf" id="pin-root">
+              <svg class="glyph"><use href="#i-pin"/></svg>
+              <div class="domain-chip" id="pin-chip">instagram.com</div>
+              <h1 style="font-size:16px;">This site requires your PIN.</h1>
+              <div style="margin:20px 0 6px;">
+                <input class="input mono" id="pin-input" type="password" maxlength="6" style="text-align:center;letter-spacing:6px;font-size:18px;height:44px;" placeholder="••••">
+              </div>
+              <p id="pin-error" style="color:var(--destructive);font-size:12.5px;height:16px;margin:2px 0 16px;"></p>
+              <div class="enf-actions">
+                <button class="btn btn-primary" onclick="Proto.pin.verify()">Verify PIN</button>
+                <button class="link-btn">Back to what I was doing</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="demo-toggle">
+        <div class="demo-label">Prototype control — not part of the product UI</div>
+        <div class="demo-toggle-row">
+          <button class="demo-btn" onclick="Proto.pin.showError()">Simulate incorrect PIN</button>
+          <button class="demo-btn" onclick="Proto.pin.reset()">Reset</button>
+        </div>
+        <div class="demo-toggle-row" style="margin-top:8px;">
+          <button class="demo-btn is-active" data-group="pn-mode" data-mode="normal" onclick="Proto.privacyDemo.pin('normal')">Normal constraint</button>
+          <button class="demo-btn" data-group="pn-mode" data-mode="private" onclick="Proto.privacyDemo.pin('private')">Private constraint</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================= HARD BLOCK ============================= -->
+    <section class="screen" data-screen="hard-block">
+      <div class="screen-head">
+        <div class="eyebrow">Enforcement</div>
+        <h1>Hard Block</h1>
+        <p>The calmest-looking page in the product, not the most severe. No red, no icon-as-warning — severity comes from having exactly one action, not from color or size. The copy never names the domain in the sentence, so the private variant only needs to hide the chip below.</p>
+      </div>
+      <div class="stage">
+        <div class="browser-device">
+          <div class="browser-chrome"><div class="dots"><span></span><span></span><span></span></div><div class="url-pill"><svg><use href="#i-lock-mini"/></svg>x.com</div></div>
+          <div class="page-canvas">
+            <div class="enf">
+              <svg class="glyph"><use href="#i-hardblock"/></svg>
+              <div class="domain-chip" id="hb-chip">x.com</div>
+              <h1>You've closed this one off.</h1>
+              <div class="enf-actions" style="margin-top:8px;">
+                <button class="btn btn-primary">Back to what I was doing</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="demo-toggle">
+        <div class="demo-label">Prototype control — not part of the product UI</div>
+        <div class="demo-toggle-row">
+          <button class="demo-btn is-active" data-group="hb-mode" data-mode="normal" onclick="Proto.privacyDemo.hardblock('normal')">Normal constraint</button>
+          <button class="demo-btn" data-group="hb-mode" data-mode="private" onclick="Proto.privacyDemo.hardblock('private')">Private constraint</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================= TAB BUDGET ============================= -->
+    <section class="screen" data-screen="tab-budget">
+      <div class="screen-head">
+        <div class="eyebrow">Enforcement</div>
+        <h1>Tab Budget</h1>
+        <p>Purpose-built, not a tab manager: an oldest-first list with one close control per row, plus a single-click shortcut. Try closing a tab below.</p>
+      </div>
+      <div class="stage">
+        <div class="browser-device">
+          <div class="browser-chrome"><div class="dots"><span></span><span></span><span></span></div><div class="url-pill"><svg><use href="#i-lock-mini"/></svg>chatgpt.com</div></div>
+          <div class="page-canvas">
+            <div class="enf" style="max-width:380px;">
+              <h1 id="tb-title" style="font-size:17px;">Tab budget: 11 of 10</h1>
+              <p class="sub" id="tb-sub">Close a tab to keep going.</p>
+              <div class="tab-list" id="tb-list">
+                <div class="row" data-tab="github"><div class="fav">G</div><div class="main"><span class="title">GitHub</span><span class="url">github.com</span></div><button class="icon-btn danger" onclick="Proto.tabs.close('github')"><svg><use href="#i-delete"/></svg></button></div>
+                <div class="row" data-tab="youtube"><div class="fav">Y</div><div class="main"><span class="title">YouTube</span><span class="url">youtube.com</span></div><button class="icon-btn danger" onclick="Proto.tabs.close('youtube')"><svg><use href="#i-delete"/></svg></button></div>
+                <div class="row" data-tab="mdn"><div class="fav">M</div><div class="main"><span class="title">MDN Web Docs</span><span class="url">developer.mozilla.org</span></div><button class="icon-btn danger" onclick="Proto.tabs.close('mdn')"><svg><use href="#i-delete"/></svg></button></div>
+                <div class="row" data-tab="chatgpt"><div class="fav">C</div><div class="main"><span class="title">ChatGPT</span><span class="url">chatgpt.com</span></div><button class="icon-btn danger" onclick="Proto.tabs.close('chatgpt')"><svg><use href="#i-delete"/></svg></button></div>
+                <div class="row" data-tab="so"><div class="fav">S</div><div class="main"><span class="title">Stack Overflow</span><span class="url">stackoverflow.com</span></div><button class="icon-btn danger" onclick="Proto.tabs.close('so')"><svg><use href="#i-delete"/></svg></button></div>
+                <div class="row" data-tab="docs"><div class="fav">D</div><div class="main"><span class="title">Google Docs</span><span class="url">docs.google.com</span></div><button class="icon-btn danger" onclick="Proto.tabs.close('docs')"><svg><use href="#i-delete"/></svg></button></div>
+              </div>
+              <div class="enf-actions">
+                <button class="btn btn-primary" id="tb-close-oldest" onclick="Proto.tabs.closeOldest()">Close oldest tab</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="demo-toggle">
+        <div class="demo-label">Prototype control — not part of the product UI</div>
+        <div class="demo-toggle-row"><button class="demo-btn" onclick="Proto.tabs.reset()">Reset tabs</button></div>
+      </div>
+    </section>
+
+    <!-- ============================= COMPARISON BOARD ============================= -->
+    <section class="screen" data-screen="compare">
+      <div class="screen-head">
+        <div class="eyebrow">Overview</div>
+        <h1>Comparison board</h1>
+        <p>Every major surface side by side, at reduced scale, to judge whether the popup and the enforcement pages read as one product.</p>
+      </div>
+
+      <div class="compare-group">
+        <h2>Popup</h2>
+        <div class="compare-grid" id="compare-popup"></div>
+      </div>
+      <div class="compare-group">
+        <h2>Enforcement</h2>
+        <div class="compare-grid" id="compare-enf"></div>
+      </div>
+    </section>
+
+    <!-- ============================= BRAND EXPLORATION ============================= -->
+    <section class="screen" data-screen="brand">
+      <div class="screen-head">
+        <div class="eyebrow">Brand</div>
+        <h1>Brand exploration</h1>
+        <p>Wordmark, three untested Return Arc variants, the palette as swatches, type specimens, and the full icon family together.</p>
+      </div>
+
+      <div class="brand-block">
+        <h2>Wordmark</h2>
+        <p class="note">Lowercase, no period, system sans at normal weight. Never stretched or paired with a slogan inline.</p>
+        <div class="wordmark-demo"><svg class="mark"><use href="#i-mark-a"/></svg><span class="word">boomrng</span></div>
+      </div>
+
+      <div class="brand-block">
+        <h2>Return Arc — locked</h2>
+        <p class="note">Variant A, Smooth Arc, is the chosen V2 mark — used everywhere in this prototype (popup header, toolbar icon, this page's own topbar). B and C are kept below only as a record of what was explored and retired; they are not in further consideration.</p>
+        <div class="mark-variants">
+          <div class="mark-card" style="border-color:var(--accent);">
+            <div class="mark-label" style="color:var(--accent);">A — Smooth Arc · chosen for V2</div>
+            <div class="mark-sizes">
+              <div class="cell"><svg width="16" height="16"><use href="#i-mark-a"/></svg><span class="px">16px</span></div>
+              <div class="cell"><svg width="32" height="32"><use href="#i-mark-a"/></svg><span class="px">32px</span></div>
+              <div class="cell"><svg width="48" height="48"><use href="#i-mark-a"/></svg><span class="px">48px</span></div>
+              <div class="cell"><svg width="128" height="128"><use href="#i-mark-a"/></svg><span class="px">128px</span></div>
+            </div>
+          </div>
+          <div class="mark-card" style="opacity:0.5;">
+            <div class="mark-label">B — Notch Ring · retired</div>
+            <div class="mark-sizes">
+              <div class="cell"><svg width="16" height="16"><use href="#i-mark-b"/></svg><span class="px">16px</span></div>
+              <div class="cell"><svg width="32" height="32"><use href="#i-mark-b"/></svg><span class="px">32px</span></div>
+              <div class="cell"><svg width="48" height="48"><use href="#i-mark-b"/></svg><span class="px">48px</span></div>
+            </div>
+          </div>
+          <div class="mark-card" style="opacity:0.5;">
+            <div class="mark-label">C — Bent Mark · retired</div>
+            <div class="mark-sizes">
+              <div class="cell"><svg width="16" height="16"><use href="#i-mark-c"/></svg><span class="px">16px</span></div>
+              <div class="cell"><svg width="32" height="32"><use href="#i-mark-c"/></svg><span class="px">32px</span></div>
+              <div class="cell"><svg width="48" height="48"><use href="#i-mark-c"/></svg><span class="px">48px</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="brand-block">
+        <h2>Palette</h2>
+        <p class="note">Rendered together, not as a hex list. Judge whether the accent still reads as "the one thing that matters" against these neutrals.</p>
+        <div class="swatch-grid">
+          <div class="swatch"><div class="fill" style="background:#0A2119"></div><div class="info"><div class="name">Canvas</div><div class="hex">#0A2119</div></div></div>
+          <div class="swatch"><div class="fill" style="background:#102A21"></div><div class="info"><div class="name">Surface</div><div class="hex">#102A21</div></div></div>
+          <div class="swatch"><div class="fill" style="background:#14332A"></div><div class="info"><div class="name">Card</div><div class="hex">#14332A</div></div></div>
+          <div class="swatch"><div class="fill" style="background:#1E3A30"></div><div class="info"><div class="name">Border</div><div class="hex">#1E3A30</div></div></div>
+          <div class="swatch"><div class="fill" style="background:#EEF5F1"></div><div class="info"><div class="name">Text primary</div><div class="hex">#EEF5F1</div></div></div>
+          <div class="swatch"><div class="fill" style="background:#9EB3AA"></div><div class="info"><div class="name">Text secondary</div><div class="hex">#9EB3AA</div></div></div>
+          <div class="swatch"><div class="fill" style="background:#2BBE6E"></div><div class="info"><div class="name">Accent</div><div class="hex">#2BBE6E</div></div></div>
+          <div class="swatch"><div class="fill" style="background:#E3A53D"></div><div class="info"><div class="name">Warning</div><div class="hex">#E3A53D</div></div></div>
+          <div class="swatch"><div class="fill" style="background:#E0555A"></div><div class="info"><div class="name">Destructive</div><div class="hex">#E0555A</div></div></div>
+          <div class="swatch"><div class="fill" style="background:#4F9CDB"></div><div class="info"><div class="name">Info</div><div class="hex">#4F9CDB</div></div></div>
+        </div>
+      </div>
+
+      <div class="brand-block">
+        <h2>Typography</h2>
+        <div class="type-specimen">
+          <div class="type-row"><span class="tag">page title / 17·600</span><span class="sample" style="font-size:17px;font-weight:600;">Sites</span></div>
+          <div class="type-row"><span class="tag">section heading / 13·600</span><span class="sample" style="font-size:13px;font-weight:600;color:var(--text-secondary);">Tab Budget</span></div>
+          <div class="type-row"><span class="tag">body / 14·400</span><span class="sample" style="font-size:14px;">4 constraints active</span></div>
+          <div class="type-row"><span class="tag">secondary / 13·400</span><span class="sample" style="font-size:13px;color:var(--text-secondary);">Set to 0 for no limit.</span></div>
+          <div class="type-row"><span class="tag">domain / mono 14·500</span><span class="sample" style="font-family:var(--font-mono);font-size:14px;font-weight:500;">youtube.com</span></div>
+          <div class="type-row"><span class="tag">timer / mono 28·600</span><span class="sample" style="font-family:var(--font-mono);font-size:28px;font-weight:600;">12 min</span></div>
+          <div class="type-row"><span class="tag">button / 14·500</span><span class="sample" style="font-size:14px;font-weight:500;">Back to what I was doing</span></div>
+        </div>
+      </div>
+
+      <div class="brand-block">
+        <h2>Icon family</h2>
+        <p class="note">One stroke weight, one grid, one geometry language across product and system icons.</p>
+        <div class="icon-grid">
+          <div class="icon-cell"><svg><use href="#i-dashboard"/></svg><span>Dashboard</span></div>
+          <div class="icon-cell"><svg><use href="#i-sites"/></svg><span>Sites</span></div>
+          <div class="icon-cell"><svg><use href="#i-settings"/></svg><span>Settings</span></div>
+          <div class="icon-cell"><svg><use href="#i-checkpoint"/></svg><span>Checkpoint</span></div>
+          <div class="icon-cell"><svg><use href="#i-delay"/></svg><span>Delay</span></div>
+          <div class="icon-cell"><svg><use href="#i-pin"/></svg><span>PIN</span></div>
+          <div class="icon-cell"><svg><use href="#i-hardblock"/></svg><span>Hard Block</span></div>
+          <div class="icon-cell"><svg><use href="#i-tabbudget"/></svg><span>Tab Budget</span></div>
+          <div class="icon-cell"><svg><use href="#i-add"/></svg><span>Add</span></div>
+          <div class="icon-cell"><svg><use href="#i-edit"/></svg><span>Edit</span></div>
+          <div class="icon-cell"><svg><use href="#i-delete"/></svg><span>Delete</span></div>
+          <div class="icon-cell"><svg><use href="#i-export"/></svg><span>Export</span></div>
+          <div class="icon-cell"><svg><use href="#i-import"/></svg><span>Import</span></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

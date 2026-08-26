@@ -3,11 +3,12 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: none;
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  font-family: var(--font-sans);
   font-weight: 500;
   cursor: pointer;
-  transition: all 150ms ease;
+  transition: background var(--duration-fast) ease, border-color var(--duration-fast) ease, color var(--duration-fast) ease;
   white-space: nowrap;
 }
 
@@ -24,39 +25,42 @@
 /* Variants */
 .primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 .primary:hover:not(:disabled) {
-  background: #00c94b;
+  background: var(--accent-hover);
 }
 
 .secondary {
-  background: var(--input-bg);
-  color: var(--text);
-  border: 1px solid var(--border);
+  background: var(--surface-subtle);
+  color: var(--text-primary);
+  border-color: var(--border);
 }
 
 .secondary:hover:not(:disabled) {
-  background: #1a3a2f;
+  border-color: var(--border-strong);
 }
 
+/* Quiet ghost treatment for de-emphasized actions (e.g. Cancel) that
+   would otherwise compete visually with a nearby primary action. */
 .ghost {
   background: transparent;
-  color: var(--text);
+  color: var(--text-secondary);
 }
 
 .ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  background: var(--surface-subtle);
 }
 
 .danger {
-  background: #dc3545;
-  color: #fff;
+  background: var(--destructive);
+  color: var(--text-primary);
 }
 
 .danger:hover:not(:disabled) {
-  background: #c82333;
+  background: #c94a4e;
 }
 
 /* Sizes */

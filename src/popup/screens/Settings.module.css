@@ -1,0 +1,115 @@
+.container {
+  padding: var(--space-4);
+}
+
+.title {
+  margin: 0 0 16px 0;
+  font-size: var(--text-title);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.section {
+  margin-bottom: 24px;
+}
+
+.sectionTitle {
+  margin: 0 0 12px 0;
+  font-size: var(--text-heading);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.toggleLabel {
+  color: var(--text-primary);
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+}
+
+.fieldLabel {
+  color: var(--text-primary);
+}
+
+.fieldHint {
+  font-size: var(--text-body-secondary);
+  color: var(--text-secondary);
+}
+
+.numberInput {
+  width: 64px;
+  padding: 8px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.numberInput:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.pinGroup {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pinInput {
+  flex: 1;
+  padding: 10px 12px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-body);
+}
+
+.pinInput:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.clearPinBtn {
+  margin-top: 8px;
+}
+
+.errorText {
+  display: block;
+  color: var(--destructive);
+  font-size: var(--text-body-secondary);
+  margin-top: 4px;
+}
+
+.buttonGroup {
+  display: flex;
+  gap: 8px;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+}

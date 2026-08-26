@@ -1,0 +1,39 @@
+.header {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 var(--space-4);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.mark {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+  margin-right: var(--space-2);
+  flex-shrink: 0;
+}
+
+.wordmark {
+  font-size: var(--text-heading);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.statusDot {
+  margin-left: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.active {
+  background: var(--accent);
+}
+
+.inactive {
+  border: 1.5px solid var(--text-muted);
+  background: transparent;
+}

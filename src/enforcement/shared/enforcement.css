@@ -1,0 +1,210 @@
+@import '../../shared/styles/tokens.css';
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--canvas);
+  color: var(--text-primary);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.enforcement-page {
+  width: 100%;
+  max-width: 480px;
+  padding: 32px;
+  text-align: center;
+}
+
+.enforcement-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+  font-size: 28px;
+}
+
+.enforcement-icon.checkpoint {
+  background: rgba(0, 178, 66, 0.15);
+  color: var(--accent);
+}
+
+.enforcement-icon.delay {
+  background: rgba(245, 166, 35, 0.15);
+  color: var(--warning);
+}
+
+.enforcement-icon.block {
+  background: rgba(224, 85, 90, 0.15);
+  color: var(--destructive);
+}
+
+.enforcement-icon.pin {
+  background: rgba(79, 156, 219, 0.15);
+  color: var(--info);
+}
+
+.enforcement-icon.tabbudget {
+  background: rgba(224, 85, 90, 0.15);
+  color: var(--destructive);
+}
+
+.enforcement-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+
+.enforcement-message {
+  font-size: 16px;
+  color: var(--text-secondary);
+  margin-bottom: 32px;
+  line-height: 1.5;
+}
+
+.enforcement-domain {
+  display: inline-block;
+  padding: 6px 12px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-body);
+  color: var(--text-primary);
+  margin-bottom: 24px;
+}
+
+.enforcement-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px;
+  border-radius: var(--radius-control);
+  font-family: var(--font-sans);
+  font-size: var(--text-button);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--duration-fast) ease, border-color var(--duration-fast) ease, color var(--duration-fast) ease;
+  border: 1px solid transparent;
+  text-decoration: none;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+
+.btn-secondary:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.btn-danger {
+  background: var(--destructive);
+  color: var(--text-primary);
+}
+
+.btn-danger:hover {
+  background: #c94a4e;
+}
+
+.input {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  text-align: center;
+  letter-spacing: 4px;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.input.error {
+  border-color: var(--destructive);
+}
+
+.countdown {
+  font-family: var(--font-mono);
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 24px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--surface-subtle);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 1s linear;
+}
+
+.error-text {
+  color: var(--destructive);
+  font-size: var(--text-body-secondary);
+  margin-top: 8px;
+}
+
+.brand {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: var(--text-meta);
+  color: var(--text-secondary);
+  opacity: 0.5;
+}

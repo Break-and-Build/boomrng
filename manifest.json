@@ -22,5 +22,18 @@
     "16": "images/icon-16.png",
     "48": "images/icon-48.png",
     "128": "images/icon-128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "dist/src/enforcement/checkpoint/index.html",
+        "dist/src/enforcement/delay/index.html",
+        "dist/src/enforcement/block/index.html",
+        "dist/src/enforcement/pin/index.html",
+        "dist/src/enforcement/tabbudget/index.html",
+        "dist/assets/enforcement.css"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

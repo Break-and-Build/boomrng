@@ -1,4 +1,5 @@
 import React from 'react';
+import { DashboardIcon, SitesIcon, SettingsIcon, type IconProps } from '../../icons';
 import styles from './BottomNavigation.module.css';
 
 export interface BottomNavigationProps {
@@ -6,25 +7,25 @@ export interface BottomNavigationProps {
   onChange: (screen: 'dashboard' | 'sites' | 'settings') => void;
 }
 
-export const BottomNavigation: React.FC<BottomNavigationProps> = ({ active, onChange }) => {
-  const items = [
-    { id: 'dashboard' as const, label: 'Dashboard', icon: '◈' },
-    { id: 'sites' as const, label: 'Sites', icon: '◉' },
-    { id: 'settings' as const, label: 'Settings', icon: '⚙' },
-  ];
+const ITEMS: { id: 'dashboard' | 'sites' | 'settings'; label: string; Icon: React.FC<IconProps> }[] = [
+  { id: 'dashboard', label: 'Dashboard', Icon: DashboardIcon },
+  { id: 'sites', label: 'Sites', Icon: SitesIcon },
+  { id: 'settings', label: 'Settings', Icon: SettingsIcon },
+];
 
+export const BottomNavigation: React.FC<BottomNavigationProps> = ({ active, onChange }) => {
   return (
     <nav className={styles.nav} role="navigation" aria-label="Main navigation">
-      {items.map((item) => (
+      {ITEMS.map(({ id, label, Icon }) => (
         <button
-          key={item.id}
-          className={`${styles.item} ${active === item.id ? styles.active : ''}`}
-          onClick={() => onChange(item.id)}
-          aria-current={active === item.id ? 'page' : undefined}
+          key={id}
+          className={`${styles.item} ${active === id ? styles.active : ''}`}
+          onClick={() => onChange(id)}
+          aria-current={active === id ? 'page' : undefined}
           type="button"
         >
-          <span className={styles.icon}>{item.icon}</span>
-          <span className={styles.label}>{item.label}</span>
+          <Icon className={styles.icon} />
+          <span className={styles.label}>{label}</span>
         </button>
       ))}
     </nav>

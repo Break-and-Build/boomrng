@@ -14,7 +14,7 @@ export const DEFAULT_SETTINGS: Settings = {
   maxOverridesPerDay: 3,
   requirePinAfter: 2,
   tabBudget: 10,
-  landingPage: 'https://github.com',
+  landingPage: '',
   allowedSites: ['localhost'],
   strictMode: false,
   schemaVersion: 1,

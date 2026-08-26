@@ -10,9 +10,9 @@
 }
 
 .content {
-  background: var(--bg);
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   width: 100%;
   max-width: 400px;
   max-height: 90vh;
@@ -30,9 +30,9 @@
 
 .title {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--text-heading);
   font-weight: 600;
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 .close {
@@ -43,16 +43,21 @@
   justify-content: center;
   background: transparent;
   border: none;
-  border-radius: 6px;
-  color: rgba(255, 255, 255, 0.4);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
   font-size: 20px;
   cursor: pointer;
-  transition: all 150ms ease;
+  transition: background var(--duration-fast) ease, color var(--duration-fast) ease;
 }
 
 .close:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text);
+  background: var(--surface-subtle);
+  color: var(--text-primary);
+}
+
+.close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .body {

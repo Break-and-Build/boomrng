@@ -1,10 +1,36 @@
 .app {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  width: 360px;
+  min-height: 420px;
+  max-height: 560px;
+  background: var(--canvas);
+  overflow: hidden;
 }
 
 .main {
   flex: 1;
-  overflow: auto;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.screenTransition {
+  animation: screenEnter var(--duration-normal) var(--ease-out);
+}
+
+@keyframes screenEnter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screenTransition {
+    animation: none;
+  }
 }

@@ -6,7 +6,7 @@
 
 .progress {
   flex: 1;
-  background: var(--input-bg);
+  background: var(--surface-subtle);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -30,20 +30,20 @@
 }
 
 .success .fill {
-  background: #28a745;
+  background: var(--success);
 }
 
 .warning .fill {
-  background: #ffc107;
+  background: var(--warning);
 }
 
 .error .fill {
-  background: #dc3545;
+  background: var(--destructive);
 }
 
 .label {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: var(--text-label);
+  color: var(--text-secondary);
   white-space: nowrap;
   min-width: 48px;
   text-align: right;

@@ -1,7 +1,7 @@
 .card {
-  background: var(--input-bg);
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   width: 100%;
   text-align: left;
 }
@@ -12,8 +12,7 @@
 }
 
 .interactive:hover {
-  border-color: var(--accent);
-  background: rgba(0, 178, 66, 0.05);
+  border-color: var(--border-strong);
 }
 
 .none {
