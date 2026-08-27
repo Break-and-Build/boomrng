@@ -229,6 +229,8 @@ export const Sites: React.FC<SitesProps> = ({
             icon={<AddIcon />}
             label="Add constraint"
             title="Add constraint"
+            variant="accent"
+            size="md"
             onClick={onAddConstraint}
             data-focus-target="add-constraint"
           />

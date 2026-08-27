@@ -1,6 +1,4 @@
 .iconButton {
-  width: 26px;
-  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -33,6 +31,31 @@
   cursor: not-allowed;
 }
 
+.sm {
+  width: 26px;
+  height: 26px;
+}
+
+.md {
+  width: 32px;
+  height: 32px;
+}
+
+.md svg {
+  width: 16px;
+  height: 16px;
+}
+
 .danger:hover:not(:disabled) {
   color: var(--destructive);
+}
+
+.accent {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.accent:hover:not(:disabled) {
+  background: var(--accent-hover);
+  color: var(--text-on-accent);
 }

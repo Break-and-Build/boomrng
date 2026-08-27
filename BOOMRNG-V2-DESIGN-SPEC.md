@@ -322,13 +322,14 @@ Answers, in order, top to bottom:
 | State | Control | Label | Why |
 |---|---|---|---|
 | Empty | `EmptyState` primary button (centered) | "Add your first constraint" — full words, descriptive | A first-time user needs the *words*, not an icon, to understand what the button does before they've seen the product do anything |
-| Populated | `IconButton`, top-right of the header row | icon only (`+`), no visible text | Once at least one constraint exists, the user already knows what "Sites" and "adding one" mean — the icon is now saving space, not hiding meaning (§27) |
+| Populated | `IconButton` (`variant="accent"`, `size="md"`), top-right of the header row | icon only (`+`), filled `--accent` background, no visible text | Once at least one constraint exists, the user already knows what "Sites" and "adding one" mean — the icon is now saving space, not hiding meaning (§27). It's the single primary action on this screen, so it carries the same filled-accent treatment `Button`'s primary variant uses elsewhere, not the muted/ghost default `IconButton` renders everywhere else (the focused-header back arrow, delete confirmations) |
 
 The populated-state `+` is a compact `IconButton` (§24), not a text-plus-icon `Button`:
 - `aria-label="Add constraint"` (required — this is the button's only accessible name)
 - a native tooltip on hover/focus (`title="Add constraint"` at minimum; a richer tooltip component if one already exists in the shared library, but a native title is sufficient and shouldn't be skipped for want of something fancier)
-- built from the shared `IconButton` component, not a one-off button — this is exactly the kind of control that component exists for
-- a click/touch target of at least 32×32px even though the *visible* icon is smaller (§24's `IconButton` spec already sizes the hit area at 26×26 with padding; if usability testing on-device shows that's tight, grow the hit area via padding, not the icon itself)
+- built from the shared `IconButton` component's `accent` variant, not a one-off Sites-specific button — this is exactly the kind of control that component exists for
+- **filled with `--accent`, icon colored `--text-on-accent`** (the same pair `Button`'s primary variant already uses, so contrast is already verified elsewhere in the product) — not the transparent/muted treatment `IconButton`'s default variant renders
+- a click/touch target of a real 32×32px, via `IconButton`'s `size="md"` variant — a correction from an earlier version of this bullet, which claimed the *default* 26×26 `IconButton` already satisfied "at least 32×32px... with padding," which doesn't hold up arithmetically. `size="md"` exists specifically for a standalone primary icon action like this one; every other `IconButton` in the product (the focused-header back arrow, row-level actions) keeps the smaller default size unaffected
 
 **Do not add "+ Add constraint" text back into the populated header** unless real usability testing shows the bare icon is unclear — this is a deliberate, args-considered default, not an oversight to "fix" preemptively.
 
@@ -781,7 +782,7 @@ Kept intentionally small — this is a browser-action popup and five static page
 | Component | Purpose | Variants | States |
 |---|---|---|---|
 | `Button` | Primary actions | primary (filled accent), secondary (bordered), ghost (text-only) | default, hover, focus, active, disabled, loading |
-| `IconButton` | Compact icon-only actions (Sites' `+`, the focused-screen back arrow, the confirmation `Modal`'s `×`) | default, danger (delete) | default, hover, focus, disabled. Always carries an `aria-label` (its only accessible name) and a native tooltip (`title`) on hover/focus |
+| `IconButton` | Compact icon-only actions (Sites' `+`, the focused-screen back arrow, the confirmation `Modal`'s `×`) | variant: default, danger (delete), accent (filled `--accent`/`--text-on-accent`, for a screen's one primary icon action — Sites' `+`, §10); size: sm (26×26, default), md (32×32, for a standalone primary action needing a guaranteed hit target) | default, hover, focus, disabled. Always carries an `aria-label` (its only accessible name) and a native tooltip (`title`) on hover/focus |
 | `ConstraintCard`'s row actions | Sites row-level edit/delete — same interaction contract as `IconButton` (`aria-label`, `title`, focus-visible outline) but sized locally within the row rather than sharing the component instance, so hit area can be guaranteed at 32×32px independent of `IconButton`'s own sizing elsewhere (§10) | default, danger (delete) | default, hover, focus. `aria-label`/`title` always read the masked placeholder for a locked private row, never the real domain |
 | `Input` | Text/number entry | text, number, password | default, focus, error, disabled |
 | `PINInput` | Masked digit entry with auto-submit | single-field (not segmented boxes — simpler, same accessibility properties) | default, error (shake), disabled |
