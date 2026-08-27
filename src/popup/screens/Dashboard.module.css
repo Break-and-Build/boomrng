@@ -64,44 +64,6 @@
   display: block;
 }
 
-.privateRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  background: none;
-  border: none;
-  padding: 10px 12px;
-  color: var(--text-secondary);
-  font-family: var(--font-sans);
-  font-size: var(--text-body-secondary);
-  cursor: pointer;
-  text-align: left;
-}
-
-.privateRow:hover {
-  color: var(--text-primary);
-  background: var(--surface-subtle);
-}
-
-.privateRow:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-.lockIcon {
-  width: 13px;
-  height: 13px;
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.chevron {
-  margin-left: auto;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
 .tabBudgetCard {
   margin-top: 16px;
 }

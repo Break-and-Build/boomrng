@@ -249,10 +249,12 @@ Answers, in order, top to bottom:
 │                                    │
 │ ┌────────────────────────────────┐│
 │ │ youtube.com      [Checkpoint]  ││  ← flat rows, one hairline
-│ │ reddit.com  [Delay · 12m left] ││    border around the group
-│ │ 🔒 3 private constraints    › ││  ← rolled up, no domains shown
+│ │ twitter.com [Delay · 15 min]   ││    border around the group —
+│ │ reddit.com       [Hard Block]  ││    public constraints only
 │ └────────────────────────────────┘│
 │                                    │
+│    View all                        │  ← quiet, appears whenever
+│                                    │    anything is hidden
 │ ┌────────────────────────────────┐│
 │ │ Tab Budget                     ││  ← this IS a card (§7 rule)
 │ │ ◔ 7 of 10                      ││    arc-shaped fill, motif tie-in
@@ -263,15 +265,22 @@ Answers, in order, top to bottom:
 └────────────────────────────────────┘
 ```
 
+**Architecture correction — Dashboard is a preview, not a second management list.** The first version of this section let the constraint list grow unbounded (all normal constraints individually, private ones rolled into one extra row). Measured against the real component tree, that scaled badly: at only 5 constraints the list already pushed the Tab Budget card below the initial viewport, and it gets worse with every constraint added. Sites already is the management surface (§10) — Dashboard's job is a quick "what's true right now," not a duplicate list. The fix: **Dashboard renders at most 3 constraint rows, ever**, regardless of how many constraints exist.
+
+**The privacy rule this revision corrects.** The original rolled-up "🔒 N private constraints" row was itself a leak: it told a casual viewer exactly how many constraints were private, which is precisely the information Private Constraint (§26) exists to withhold. The corrected rule: **private constraints influence only the headline count, and nothing else about them reaches the Dashboard DOM** — no row, no placeholder text, no "N private" figure, no icon, no `aria-label`, no `title`, no count-of-hidden-items anywhere. A casual viewer cannot tell, from the Dashboard alone, whether anything beyond the visible rows is private or simply additional public constraints past the 3-row cap — both cases render identically.
+
 | Element | Content | Hierarchy | Component | Interaction | Empty state |
 |---|---|---|---|---|---|
 | Status dot | Filled/outline dot in header | Smallest, rightmost | `StatusDot` | None (display only) | Outline when zero constraints |
-| Summary line | "N constraints active" — includes private constraints in the count; a count alone reveals nothing sensitive | Body, primary text color | plain text | None | "Nothing constrained yet." |
-| Constraint list | Non-private constraints as individual rows: domain (mono) + behavior badge + contextual state (delay countdown only). **All private constraints collapse into a single rolled-up row** — see §26 — never listed individually here even if there's only one. | List rows | `ConstraintRow` (read-only) + one `PrivateSummaryRow` | Tap a normal row → opens Edit (§10/§11). Tap the private summary row → navigates to Sites, where unlocking happens. | Whole block replaced by the page-level empty state below |
+| Summary line | "N constraints active" — the real total, including private constraints; a bare count reveals nothing about which are private | Body, primary text color | plain text | None | "Nothing constrained yet." |
+| Constraint list | Up to **3** public (`isPrivate === false`) constraints, oldest-first, as individual rows: domain (mono) + behavior badge + contextual state (delay duration only). Private constraints never appear here in any form — not as a row, a placeholder, or a count. If zero public constraints exist (all-private case), this block renders nothing at all rather than an empty box. | List rows | `ConstraintRow` (read-only) | Tap a row → opens Edit (§10/§11) | Whole block replaced by the page-level empty state below |
+| View all | Quiet ghost-button link, no count in its label (never "View all 5") | Below the list, small | ghost `Button` | Navigates to Sites | Hidden entirely when nothing is hidden (total constraints ≤ rows shown) |
 | Tab Budget card | "Tab Budget" label + arc/ring fill + "N of M" + one contextual line ("3 tabs to spare" / "Over by 2") | Section within one card | `ProgressArc` + text | Tap → Settings' Tab Budget field, optional | If `tabBudget` unset (0 = no limit), card shows "No tab budget set" + ghost "Set one" link |
 | **Full-page empty state** (zero constraints) | Headline "Nothing constrained yet." / subhead "Add a site you want a pause before opening." / one accent button "Add your first constraint" | Replaces summary line + list entirely; Tab Budget card still shows if a budget is set | `EmptyState` | Button opens the creation flow (§11) directly from Dashboard | — |
 
-The "View all in Sites" link from the first version of this section is dropped now that private constraints are rolled up: with normal constraints shown individually and private ones collapsed to one row, the Dashboard list rarely needs truncation in the first place.
+**"View all" is keyed off the total vs. what's actually rendered — total constraints > rows shown — never off "are there more public constraints beyond 3."** That distinction matters: if the link only appeared when public constraints overflowed the cap, its mere presence or absence would tell a viewer whether the hidden remainder is private or just additional public constraints — exactly the signal §26 exists to prevent. Keying it off the total instead means the link behaves identically whether what's hidden is private, public-beyond-the-cap, or a mix.
+
+**The all-private case is deliberately quiet, not explained.** A user with only private constraints (e.g. "3 constraints active" with zero eligible public rows) sees the summary line, no list block, and a "View all" link — nothing else. No placeholder copy invents an explanation ("Private sites", "Hidden constraints") for the empty space; inventing one would either leak that the constraints are private or be factually misleading if they aren't. This is distinct from the genuine zero-constraint empty state (§9's `EmptyState` row above), which only ever fires when the real total is zero.
 
 **Explicitly excluded, per instruction:** no "N constraints enforced today" counter, no history, no charts, no streak, no comparison to yesterday. If `enforcedToday`-style data is ever wired up in a later phase, it does not belong on the Dashboard — the Dashboard answers "what's true right now," not "what happened."
 
@@ -329,7 +338,7 @@ The populated-state `+` is a compact `IconButton` (§24), not a text-plus-icon `
 
 **Do not add "+ Add constraint" text back into the populated header** unless real usability testing shows the bare icon is unclear — this is a deliberate, args-considered default, not an oversight to "fix" preemptively.
 
-- **List:** flat rows in one bordered region (matches Dashboard's list treatment exactly, for consistency between the two places a constraint can appear). Unlike the Dashboard's rollup, private constraints here **stay as individual rows** — Sites is where you manage each constraint, and its behavior + configuration (still visible even while masked) is usually enough to tell rows apart without needing the domain.
+- **List:** flat rows in one bordered region (same row styling as Dashboard's preview list, §9, for visual consistency between the two places a constraint can appear — though Sites shows every constraint, not a capped preview). Unlike Dashboard, where a private constraint leaves no trace beyond the headline count, private constraints here **stay as individual rows** — Sites is where you manage each constraint, and its behavior + configuration (still visible even while masked) is usually enough to tell rows apart without needing the domain.
 - **Row content:** domain (mono, primary line) → behavior label + relevant config on the same line where it fits ("Delay · 15 min") → optional personal-reason line (italic, `--text-muted`, single line, truncated with ellipsis) → edit/delete icon buttons, visible on hover/focus (not permanently rendered at full opacity, to keep the row visually light when idle). **For a private, still-locked row:** the domain line is replaced by a small lock glyph + "Private site" in the sans-serif italic (not monospace — it's a placeholder label, not real data, and monospace would falsely imply it's the actual identifier); the personal-reason line, if any, is also withheld while locked, for the same reason the domain is (§26). Once unlocked for the session, the row shows the real domain plus a small muted "Private" tag so it's still clear which constraints carry the flag.
 - **Enabled/disabled per-row toggle:** **not included in V2 Core.** Adding a pause-this-one-constraint toggle multiplies state (4 behaviors × enabled/disabled × in-progress-delay) for a benefit that doesn't clearly outweigh the complexity — if a user wants a site unconstrained, they delete the constraint; re-adding it takes the same three taps as re-enabling would. Flagged as a **V2 Later** candidate only if real usage shows people re-adding the same domain repeatedly.
 - **Editing:** tapping a row opens the same panel as Add, pre-filled (§11) — one flow, not two. **Exception:** editing a still-locked private constraint prompts for the PIN first (§26) — the edit panel never opens pre-filled with a domain the user hasn't unlocked.
@@ -724,8 +733,8 @@ All icons share stroke weight and are drawn on the same grid so they sit consist
 | Sites — reveal bar, locked | "[N] private constraints are hidden." / action: "Unlock" |
 | Sites — reveal bar, unlocked | "Private constraints unlocked for this session." / action: "Lock again" |
 | Sites — reveal bar, no PIN set | "Set a PIN in Settings to unlock private constraints." |
-| Sites/Dashboard — masked row | "Private site" (sans-serif italic, not monospace — see §10) |
-| Dashboard — private rollup | "[N] private constraints" (no behaviors, no domains — §26) |
+| Sites — masked row | "Private site" (sans-serif italic, not monospace — see §10) |
+| Dashboard — "View all" | "View all" — never "View all [N]" (§9); appears whenever the total exceeds what's shown, whatever the reason |
 | Export — private constraints present | "This export will include [N] private constraint(s) with their real domain(s), in plain text. This file is not encrypted — anyone who opens it can read them." / checkbox: "Include private constraints" (unchecked by default) |
 
 **Rules applied throughout:** no exclamation points, no emoji, second person where the user is being addressed, the product's own name never used as the subject of a sentence about the user's behavior ("You've closed this one off," not "Boomrng has blocked this site").
@@ -750,7 +759,7 @@ All icons share stroke weight and are drawn on the same grid so they sit consist
 
 | Screen | Purpose | Entry point | Primary action | Secondary action | Important states |
 |---|---|---|---|---|---|
-| Dashboard | At-a-glance status | Default popup view | Tap a constraint row → edit | "Add first constraint" (empty state) | Empty, populated, over-budget, private constraints rolled up |
+| Dashboard | At-a-glance preview, not management | Default popup view | Tap a constraint row → edit | "Add first constraint" (empty state) / "View all" → Sites | Empty (zero constraints), preview (≤3 public rows), truncated (>3 public or any hidden), all-private (count only, no rows), over-budget |
 | Sites | Manage constraints | Bottom nav | Icon-only `+` (populated) / "Add your first constraint" (empty, never both, §10) | Edit / delete per row, unlock private constraints | Empty, populated, private constraints locked / unlocked / no-PIN-set |
 | Add Constraint (dedicated screen) | Create a constraint | `+` (Sites, populated) or "Add your first constraint" (Sites, empty) | "Add constraint" — compact, text, §7/§11/§27 | Back (arrow, header) — no Cancel (§11) | Compact accordion (one behavior expanded at a time), private toggle, reason collapsed by default, validation error — no live preview in production (§11) |
 | Edit Constraint (dedicated screen, same component as Add) | Modify an existing constraint | Row's Edit control on Sites | "Save changes" — compact, text | Back (arrow, header) — no Cancel | Same as Add, pre-filled; reason expanded automatically if already set (§11) |
@@ -789,8 +798,7 @@ Kept intentionally small — this is a browser-action popup and five static page
 | `Toast` | Only for actions with no other visible confirmation (import success/failure) | success, error | entering, visible, exiting |
 | `Section` | Settings grouping | default | — |
 | `EmptyState` | Zero-content states (Dashboard, Sites) | default | — |
-| `ConstraintRow` | A constraint in a list | read-only (Dashboard), editable (Sites), private/masked, private/revealed | default, hover (reveal actions), focus |
-| `PrivateSummaryRow` *(new, §26)* | Dashboard's single rolled-up row for all private constraints | default | hover, focus; navigates to Sites |
+| `ConstraintRow` | A constraint in a list | read-only, public-only, capped at 3 (Dashboard, §9); editable, every constraint, private/masked, private/revealed (Sites) | default, hover (reveal actions on Sites), focus |
 | `TabRow` | A tab in the Tab Budget over-limit list | default | default, closing (fade-out) |
 | `StatusDot` | Header active/inactive indicator | active, inactive | static |
 
@@ -836,7 +844,7 @@ The **"Private constraint"** checkbox lives directly under the Domain field in A
 | Surface | Normal constraint | Private constraint |
 |---|---|---|
 | Sites row | `youtube.com` (mono) + behavior badge | 🔒 *Private site* (sans-serif italic — a label, not data) + behavior badge — **still shown as its own row**, since behavior/config is usually enough to tell constraints apart without the domain |
-| Dashboard list | Individual row, same as Sites | **Not listed individually, ever** — all private constraints roll into one line: *"3 private constraints"* (§9). Even a single private constraint gets the rollup treatment rather than its own "Private site" row, so the mere *count* of private constraints isn't legible at a glance from the phrasing alone changing shape between "one" and "several." |
+| Dashboard list | Individual row, same as Sites | **Not shown at all, in any form** (§9, revised) — no row, no rollup line, no "N private constraints" count. A private constraint contributes only to the plain-text headline total ("N constraints active"); nothing else about it reaches the Dashboard. This supersedes an earlier version of this section that rolled private constraints into a visible "N private constraints" summary row — that rollup was itself a leak, since it disclosed exactly how many constraints were private. |
 | Personal reason | Shown, italic, on Sites row and Checkpoint page | **Withheld everywhere the domain is withheld** — a reason like "stop checking dating profiles" is exactly as identifying as the domain itself, so masking one and not the other would defeat the point. |
 
 ### Reveal & authentication (Sites screen)

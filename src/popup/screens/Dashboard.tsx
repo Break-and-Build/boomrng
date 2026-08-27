@@ -10,10 +10,9 @@ import { Card } from '../components/foundation/Card';
 import { Spinner } from '../components/foundation/Spinner';
 import { ProgressArc } from '../components/foundation/ProgressArc';
 import { EmptyState } from '../components/feedback/EmptyState';
-import { LockIcon } from '../components/icons';
 import styles from './Dashboard.module.css';
 
-const MAX_ROWS = 5;
+const MAX_ROWS = 3;
 
 export interface DashboardProps {
   onNavigate: (screen: 'sites' | 'settings') => void;
@@ -43,12 +42,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
     );
   }
 
-  const normalConstraints = constraints.filter((c) => !c.isPrivate);
-  const privateConstraints = constraints.filter((c) => c.isPrivate);
-  const hasPrivate = privateConstraints.length > 0;
-  const normalSlots = hasPrivate ? MAX_ROWS - 1 : MAX_ROWS;
-  const visibleNormal = normalConstraints.slice(0, normalSlots);
-  const hasMoreNormal = normalConstraints.length > visibleNormal.length;
+  // Dashboard is a preview, not a management list (BOOMRNG-V2-DESIGN-SPEC.md
+  // §9): at most MAX_ROWS public rows, ever. Private constraints contribute
+  // to the headline count above and nothing else — no row, no placeholder,
+  // no count of how many are private. "View all" is keyed off the total vs.
+  // what's actually rendered, not off public overflow alone, so its
+  // presence never reveals whether anything hidden is private.
+  const publicConstraints = constraints.filter((c) => !c.isPrivate);
+  const visiblePublic = publicConstraints.slice(0, MAX_ROWS);
+  const hasMore = constraints.length > visiblePublic.length;
 
   const budget = settings.tabBudget;
   const hasBudget = budget > 0;
@@ -92,36 +94,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
         <>
           <p className={styles.statusLine}>{pluralize(constraints.length, 'constraint')} active</p>
 
-          <div className={styles.listGroup}>
-            {visibleNormal.map((constraint) => {
-              const label = toV2BehaviorLabel(constraint.behavior);
-              const config = behaviorConfigText(constraint);
-              return (
-                <div className={styles.row} key={constraint.id}>
-                  <div className={styles.rowMain}>
-                    <span className={styles.domain}>{constraint.domain}</span>
+          {visiblePublic.length > 0 && (
+            <div className={styles.listGroup}>
+              {visiblePublic.map((constraint) => {
+                const label = toV2BehaviorLabel(constraint.behavior);
+                const config = behaviorConfigText(constraint);
+                return (
+                  <div className={styles.row} key={constraint.id}>
+                    <div className={styles.rowMain}>
+                      <span className={styles.domain}>{constraint.domain}</span>
+                    </div>
+                    <Badge variant={toV2BehaviorBadgeVariant(label)}>
+                      {config ? `${label} · ${config}` : label}
+                    </Badge>
                   </div>
-                  <Badge variant={toV2BehaviorBadgeVariant(label)}>
-                    {config ? `${label} · ${config}` : label}
-                  </Badge>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+          )}
 
-            {hasPrivate && (
-              <button
-                type="button"
-                className={styles.privateRow}
-                onClick={() => onNavigate('sites')}
-              >
-                <LockIcon className={styles.lockIcon} />
-                <span>{pluralize(privateConstraints.length, 'private constraint')}</span>
-                <span className={styles.chevron} aria-hidden="true">›</span>
-              </button>
-            )}
-          </div>
-
-          {hasMoreNormal && (
+          {hasMore && (
             <Button variant="ghost" size="sm" onClick={() => onNavigate('sites')}>
               View all
             </Button>
