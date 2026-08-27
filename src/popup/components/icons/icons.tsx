@@ -112,6 +112,25 @@ export function BackIcon(props: IconProps): React.ReactElement {
   );
 }
 
+/** A pencil on a line — Sites row action, §10. */
+export function EditIcon(props: IconProps): React.ReactElement {
+  return (
+    <UiIcon {...props}>
+      <path d="M4.5 15.5L5.3 12l8-8 2.7 2.7-8 8-3.5.8z" />
+    </UiIcon>
+  );
+}
+
+/** A simple trash can — Sites row action, §10. */
+export function DeleteIcon(props: IconProps): React.ReactElement {
+  return (
+    <UiIcon {...props}>
+      <path d="M5 6h10M8 6V4.6a1.3 1.3 0 0 1 1.3-1.3h1.4A1.3 1.3 0 0 1 12 4.6V6" />
+      <path d="M6.3 6v9a1 1 0 0 0 1 1h5.4a1 1 0 0 0 1-1V6" />
+    </UiIcon>
+  );
+}
+
 /**
  * The Boomrng product mark — Concept A, "Smooth Arc" (§4). Locked as the
  * V2 direction; first pass only, not final artwork.

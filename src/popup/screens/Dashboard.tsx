@@ -2,8 +2,7 @@ import React from 'react';
 import { useConstraints } from '../hooks/useConstraints';
 import { useSettings } from '../hooks/useSettings';
 import { useTabCount } from '../hooks/useTabCount';
-import { toV2BehaviorLabel, toV2BehaviorBadgeVariant } from '../../shared/utils';
-import type { Constraint } from '../../shared/types/constraint';
+import { toV2BehaviorLabel, toV2BehaviorBadgeVariant, formatBehaviorConfig } from '../../shared/utils';
 import { Badge } from '../components/foundation/Badge';
 import { Button } from '../components/foundation/Button';
 import { Card } from '../components/foundation/Card';
@@ -20,13 +19,6 @@ export interface DashboardProps {
 
 function pluralize(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
-}
-
-function behaviorConfigText(constraint: Constraint): string | null {
-  if ((constraint.behavior === 'delay' || constraint.behavior === 'progressive-delay') && constraint.delayMinutes) {
-    return `${constraint.delayMinutes} min`;
-  }
-  return null;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
@@ -98,7 +90,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             <div className={styles.listGroup}>
               {visiblePublic.map((constraint) => {
                 const label = toV2BehaviorLabel(constraint.behavior);
-                const config = behaviorConfigText(constraint);
+                const config = formatBehaviorConfig(constraint.behavior, constraint.delayMinutes);
                 return (
                   <div className={styles.row} key={constraint.id}>
                     <div className={styles.rowMain}>

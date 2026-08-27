@@ -66,6 +66,14 @@ export function toV2BehaviorBadgeVariant(label: V2BehaviorLabel): 'info' | 'warn
   }
 }
 
+/** The one piece of per-behavior config worth a badge suffix today ("Delay · 15 min"). Shared by Dashboard and Sites so the two surfaces can't drift (BOOMRNG-V2-DESIGN-SPEC.md §9/§10). */
+export function formatBehaviorConfig(behavior: ConstraintBehavior, delayMinutes: number | null): string | null {
+  if ((behavior === 'delay' || behavior === 'progressive-delay') && delayMinutes) {
+    return `${delayMinutes} min`;
+  }
+  return null;
+}
+
 export function formatNumber(num: number): string {
   return num.toLocaleString();
 }

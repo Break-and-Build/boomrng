@@ -27,6 +27,11 @@ export const App: React.FC = () => {
   const [constraints] = useConstraints();
   const [focusedFlow, setFocusedFlow] = useState<FocusedFlow | null>(null);
   const [sitesFocusHint, setSitesFocusHint] = useState<SitesFocusHint | null>(null);
+  // Session-scoped only (BOOMRNG-V2-DESIGN-SPEC.md §26) — lives here, not in
+  // Sites, because Sites unmounts across the Add/Edit focused flow and would
+  // otherwise lose it. Never persisted to chrome.storage; a fresh popup open
+  // always starts locked.
+  const [privateUnlocked, setPrivateUnlocked] = useState(false);
 
   const handleAddConstraint = useCallback(() => {
     setFocusedFlow({ type: 'add' });
@@ -60,8 +65,12 @@ export const App: React.FC = () => {
           <Sites
             onAddConstraint={handleAddConstraint}
             onEditConstraint={handleEditConstraint}
+            onNavigateToSettings={() => setActiveScreen('settings')}
             focusHint={sitesFocusHint}
             onFocusHintConsumed={() => setSitesFocusHint(null)}
+            privateUnlocked={privateUnlocked}
+            onUnlockPrivate={() => setPrivateUnlocked(true)}
+            onLockPrivate={() => setPrivateUnlocked(false)}
           />
         );
       case 'settings':

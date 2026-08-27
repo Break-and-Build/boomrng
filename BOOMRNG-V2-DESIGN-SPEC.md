@@ -298,23 +298,17 @@ Answers, in order, top to bottom:
 │ ──────────────────────────────────│
 │                                    │
 │ ┌────────────────────────────────┐│
-│ │ 🔒 3 private constraints hidden ││  ← reveal bar, see §26
-│ │                        Unlock  ││
+│ │ 🔒 Private constraints  Unlock ││  ← reveal bar, no count, §26
 │ └────────────────────────────────┘│
 │                                    │
 │ ┌────────────────────────────────┐│
-│ │ youtube.com                    ││
-│ │ Checkpoint                 ✎ 🗑││
+│ │ youtube.com      [Checkpoint] ✎🗑││  ← one line per row, always
+│ │────────────────────────────────││    consistent height
+│ │ reddit.com  [Delay · 15 min] ✎🗑││
 │ │────────────────────────────────││
-│ │ reddit.com                     ││
-│ │ Delay · 15 min              ✎ 🗑│
-│ │ "I said I'd write, not scroll" ││  ← personal reason, if set,
-│ │────────────────────────────────││    italic, muted, truncated
-│ │ 🔒 Private site                ││  ← masked domain, real behavior
-│ │ Hard Block                  ✎ 🗑│
+│ │ 🔒 Private site   [Hard Block]✎🗑││  ← masked domain, real behavior
 │ │────────────────────────────────││
-│ │ 🔒 Private site                ││
-│ │ PIN Required                ✎ 🗑│
+│ │ 🔒 Private site [PIN Required]✎🗑││
 │ └────────────────────────────────┘│
 │                                    │
 │ [◈ Dashboard] [◉ Sites] [⚙ Settings]│
@@ -339,10 +333,11 @@ The populated-state `+` is a compact `IconButton` (§24), not a text-plus-icon `
 **Do not add "+ Add constraint" text back into the populated header** unless real usability testing shows the bare icon is unclear — this is a deliberate, args-considered default, not an oversight to "fix" preemptively.
 
 - **List:** flat rows in one bordered region (same row styling as Dashboard's preview list, §9, for visual consistency between the two places a constraint can appear — though Sites shows every constraint, not a capped preview). Unlike Dashboard, where a private constraint leaves no trace beyond the headline count, private constraints here **stay as individual rows** — Sites is where you manage each constraint, and its behavior + configuration (still visible even while masked) is usually enough to tell rows apart without needing the domain.
-- **Row content:** domain (mono, primary line) → behavior label + relevant config on the same line where it fits ("Delay · 15 min") → optional personal-reason line (italic, `--text-muted`, single line, truncated with ellipsis) → edit/delete icon buttons, visible on hover/focus (not permanently rendered at full opacity, to keep the row visually light when idle). **For a private, still-locked row:** the domain line is replaced by a small lock glyph + "Private site" in the sans-serif italic (not monospace — it's a placeholder label, not real data, and monospace would falsely imply it's the actual identifier); the personal-reason line, if any, is also withheld while locked, for the same reason the domain is (§26). Once unlocked for the session, the row shows the real domain plus a small muted "Private" tag so it's still clear which constraints carry the flag.
+- **Row content:** domain (mono, truncated with ellipsis rather than wrapping — a row must never grow past one line), behavior badge with relevant config appended ("Delay · 15 min"), then edit/delete icon buttons — **always visible, not hover/focus-gated.** This is a deliberate correction from an earlier draft of this section, which specified hover-reveal: on a small popup with no persistent visual cue, hover-to-reveal risks a user never discovering the actions exist at all, and trackpad hover can be inconsistent. Always-visible compact icons (32×32 hit target, same minimum as `IconButton` elsewhere) keep the density win over full-text buttons without sacrificing discoverability. **For a private, still-locked row:** the domain line is replaced by a small lock glyph + "Private site" in the sans-serif italic (not monospace — it's a placeholder label, not real data, and monospace would falsely imply it's the actual identifier). Once unlocked for the session, the row shows the real domain (same truncation behavior) plus a small muted "Private" tag so it's still clear which constraints carry the flag.
+- **Reason stays Edit-only, not on the row** — a deliberate reversal of an earlier draft that put a truncated personal-reason line on every row. It's optional (most rows won't have one), it isn't needed for the core triage tasks (find/understand/edit/delete), and showing it only on some rows creates inconsistent row heights that hurt scannability at exactly the density this section exists to protect. Editing already surfaces it (expanded automatically when set, §11).
 - **Enabled/disabled per-row toggle:** **not included in V2 Core.** Adding a pause-this-one-constraint toggle multiplies state (4 behaviors × enabled/disabled × in-progress-delay) for a benefit that doesn't clearly outweigh the complexity — if a user wants a site unconstrained, they delete the constraint; re-adding it takes the same three taps as re-enabling would. Flagged as a **V2 Later** candidate only if real usage shows people re-adding the same domain repeatedly.
 - **Editing:** tapping a row opens the same panel as Add, pre-filled (§11) — one flow, not two. **Exception:** editing a still-locked private constraint prompts for the PIN first (§26) — the edit panel never opens pre-filled with a domain the user hasn't unlocked.
-- **Deletion:** the trash icon opens the existing `ConfirmationDialog` pattern (kept from the current implementation — it already works and doesn't need redesigning). Icon-only is appropriate here because a confirmation step already follows (§27). **Deletion is never gated by the private-constraint PIN**, locked or not — removing a constraint doesn't expose its domain, so requiring authentication first would only add friction with no privacy benefit.
+- **Deletion:** the trash icon opens the existing `ConfirmationDialog` pattern (kept from the current implementation — it already works and doesn't need redesigning). Icon-only is appropriate here because a confirmation step already follows (§27). **For a private constraint, deleting requires a fresh PIN check first, every time — see §26.** This is a correction from an earlier version of this section, which reasoned that since deletion doesn't expose a domain, it needed no gate; that missed that deletion is a *destructive* action independent of what it does or doesn't reveal, and destructive private actions warrant their own authorization regardless of session unlock state. Deletion for a normal (non-private) constraint is unaffected: trash icon → confirmation → delete, exactly as before.
 - **Quick actions:** deliberately none beyond edit/delete. No "duplicate," no "pause," no context menu — resisting the sprawl that turned V1's Settings screen into an everything-drawer.
 
 ---
@@ -730,9 +725,14 @@ All icons share stroke weight and are drawn on the same grid so they sit consist
 | Invalid domain (generic reuse) | "Enter a valid domain, like twitter.com." |
 | Add constraint — private toggle | "Private constraint" / hint: "Hides the domain in Boomrng's own screens until you unlock it with your PIN. Not encrypted." |
 | Add constraint — private, no PIN set | "You haven't set a PIN yet — this will stay masked, but anyone can unlock it without one. Set a PIN in Settings." |
-| Sites — reveal bar, locked | "[N] private constraints are hidden." / action: "Unlock" |
-| Sites — reveal bar, unlocked | "Private constraints unlocked for this session." / action: "Lock again" |
-| Sites — reveal bar, no PIN set | "Set a PIN in Settings to unlock private constraints." |
+| Sites — reveal bar, locked | "Private constraints" / action: "Unlock" — deliberately no count (§26) |
+| Sites — reveal bar, PIN entry | placeholder: "Enter PIN" / action: "Unlock" / error (reused from PIN — see above): "Incorrect PIN. Try again." |
+| Sites — reveal bar, unlocked | "Private constraints unlocked." / action: "Lock again" |
+| Sites — reveal bar, no PIN set | "Set a PIN in Settings to unlock private constraints." — "Settings" itself is the tappable route there |
+| Sites — edit blocked, no PIN | "Set a PIN in Settings to edit private constraints." |
+| Sites — delete verification (private) | helper text: "Enter your PIN to delete this constraint." / placeholder: "Enter PIN" / actions: "Verify" · "Cancel" / error (reused): "Incorrect PIN. Try again." — deliberately says "Verify," not "Delete," since a correct PIN authorizes the step, not the deletion itself |
+| Sites — delete blocked, no PIN | "Set a PIN in Settings to delete private constraints." |
+| Sites — delete confirmation (private) | "Are you sure you want to delete this private constraint?" — never the real domain, regardless of session unlock state |
 | Sites — masked row | "Private site" (sans-serif italic, not monospace — see §10) |
 | Dashboard — "View all" | "View all" — never "View all [N]" (§9); appears whenever the total exceeds what's shown, whatever the reason |
 | Export — private constraints present | "This export will include [N] private constraint(s) with their real domain(s), in plain text. This file is not encrypted — anyone who opens it can read them." / checkbox: "Include private constraints" (unchecked by default) |
@@ -781,15 +781,17 @@ Kept intentionally small — this is a browser-action popup and five static page
 | Component | Purpose | Variants | States |
 |---|---|---|---|
 | `Button` | Primary actions | primary (filled accent), secondary (bordered), ghost (text-only) | default, hover, focus, active, disabled, loading |
-| `IconButton` | Compact icon-only actions (Sites' `+`, edit, delete, the focused-screen back arrow, the confirmation `Modal`'s `×`) | default, danger (delete) | default, hover, focus, disabled. Always carries an `aria-label` (its only accessible name) and a native tooltip (`title`) on hover/focus; hit area is padded to at least 32×32px regardless of the visible icon's size (§10, §27) |
+| `IconButton` | Compact icon-only actions (Sites' `+`, the focused-screen back arrow, the confirmation `Modal`'s `×`) | default, danger (delete) | default, hover, focus, disabled. Always carries an `aria-label` (its only accessible name) and a native tooltip (`title`) on hover/focus |
+| `ConstraintCard`'s row actions | Sites row-level edit/delete — same interaction contract as `IconButton` (`aria-label`, `title`, focus-visible outline) but sized locally within the row rather than sharing the component instance, so hit area can be guaranteed at 32×32px independent of `IconButton`'s own sizing elsewhere (§10) | default, danger (delete) | default, hover, focus. `aria-label`/`title` always read the masked placeholder for a locked private row, never the real domain |
 | `Input` | Text/number entry | text, number, password | default, focus, error, disabled |
 | `PINInput` | Masked digit entry with auto-submit | single-field (not segmented boxes — simpler, same accessibility properties) | default, error (shake), disabled |
 | `BehaviorRow` *(renamed from `BehaviorOption`, §11)* | One row in the compact behavior accordion | collapsed, selected/expanded | default, hover, focus; expanded state renders its own description + config inline |
-| `BehaviorBadge` | Compact behavior label in lists | one per behavior (4, not 8) | static |
+| `Badge` | Compact status pill — behavior label + config on Dashboard *and* Sites (shared, not a dedicated per-screen component, so the two surfaces can't independently drift on what a behavior is called) | info, warning, default, error | static |
 | `DomainLabel` | Monospace-styled domain text | inline, chip (bordered, as on enforcement pages) | static; **not used** for a masked private constraint — see `PrivateLabel` below |
 | `PrivateLabel` *(new, §26)* | "Private site" placeholder shown instead of `DomainLabel` while a private constraint is locked | masked, revealed (real domain + small "Private" tag) | static |
 | `PrivacyToggle` *(new, §26)* | "Private constraint" checkbox in Add/Edit Constraint | unchecked, checked | default, focus; checked state may reveal the no-PIN-set warning |
 | `RevealBar` *(new, §26)* | Sites-screen control for unlocking private constraints for the session | locked, pin-entry, unlocked, no-pin-set | default; unlocked persists only for the popup session |
+| `PinEntryForm` *(new, §26)* | The inline PIN form itself — shared by `RevealBar`'s pin-entry state and by fresh per-action authorization (deleting a private constraint), so both look and behave identically. Purely presentational: which state a correct PIN unlocks is entirely up to whichever screen renders it, and the two are never the same state machine. | default, error | default, focus, error (quiet inline text, not a modal) |
 | `ProgressArc` | Radial arc — Delay countdown, Tab Budget ring | closing (Delay), capacity (Tab Budget) | animating, static (reduced-motion), complete |
 | `ProgressBar` *(kept as a distinct, simpler primitive)* | Any future linear-only progress need | — | — |
 | `Modal` | Short, single-decision confirmations (delete) **only** — no longer used for Add/Edit Constraint (§11) | default | open, closing |
@@ -851,13 +853,18 @@ The **"Private constraint"** checkbox lives directly under the Domain field in A
 
 This is the design that needed the most care, per the explicit ask to keep normal constraint management uncumbersome while making private ones genuinely gated:
 
-- **A `RevealBar` sits at the top of the Sites list**, only rendered when at least one private constraint exists. Three states:
-  1. **Locked** (default): *"[N] private constraints are hidden."* + an **Unlock** action.
-  2. **Unlocked**: *"Private constraints unlocked for this session."* + a **Lock again** action. All private rows swap "Private site" for their real domain, tagged with a small muted "Private" pill so it's still clear which rows carry the flag.
-  3. **No PIN set**: *"Set a PIN in Settings to unlock private constraints."* — no unlock control is offered at all in this state, because there is nothing to verify a PIN entry against. Never invent a fake "unlock" that accepts any input; that would be worse than no unlock at all.
-- **Unlocking asks for the PIN inline** (a compact field replaces the "Unlock" button's row) — not a separate modal, not a navigation away from Sites. Correct entry reveals every private row for the rest of the popup session; **the unlocked state does not persist across a popup close/reopen** — this is a deliberate, stated limitation (no "remember for a day" option), matching the product's existing no-accounts, nothing-persisted-that-doesn't-need-to-be posture.
-- **Editing a locked private constraint prompts for the PIN first**, then opens the Add/Edit panel already unlocked and pre-filled — the panel never opens with a masked domain the user then has to unlock separately, and it never opens with the real domain before the PIN check happens. If the constraint is already unlocked for the session, editing proceeds straight through with no repeated prompt — re-asking for a PIN the user already entered a moment ago would be the "cumbersome" failure mode explicitly flagged as something to avoid.
-- **Deleting a private constraint is never gated.** Removing a constraint doesn't expose its domain to anyone — there's nothing to protect by adding friction here, so the delete icon on a locked private row works exactly like it does on a normal row, confirmation dialog and all (§10).
+- **A `RevealBar` sits at the top of the Sites list**, only rendered when at least one private constraint exists. Four states:
+  1. **Locked** (default): *"Private constraints"* + an **Unlock** action. **Deliberately no count** — an earlier draft of this bar read *"[N] private constraints are hidden,"* which was itself a leak: it told a casual viewer exactly how many constraints were private, the precise thing this feature exists to withhold. The bar communicates that protected constraints exist and can be managed, nothing about how many.
+  2. **PIN entry** (after tapping Unlock): an inline password field replaces the locked row — not a separate modal, not a navigation away from Sites. An incorrect PIN shows a quiet inline error and clears the field for retry; it never says anything about *why* it's wrong beyond "Incorrect PIN."
+  3. **Unlocked**: *"Private constraints unlocked."* + a **Lock again** action. All private rows swap "Private site" for their real domain, tagged with a small muted "Private" pill so it's still clear which rows carry the flag. Correct entry reveals every private row for the rest of the popup session; **the unlocked state does not persist across a popup close/reopen** — this is a deliberate, stated limitation (no "remember for a day" option), matching the product's existing no-accounts, nothing-persisted-that-doesn't-need-to-be posture, and it lives in session-level state, never written to `chrome.storage`.
+  4. **No PIN set**: *"Set a PIN in Settings to unlock private constraints,"* with "Settings" itself as the quiet route there — no unlock control is offered at all in this state, because there is nothing to verify a PIN entry against. Never invent a fake "unlock" that accepts any input; that would be worse than no unlock at all.
+- **Editing a locked private constraint prompts for the PIN first** (reusing the same inline PIN-entry state, not a second mechanism), then opens the Add/Edit panel already unlocked and pre-filled — the panel never opens with a masked domain the user then has to unlock separately, and it never opens with the real domain before the PIN check happens. If the constraint is already unlocked for the session, editing proceeds straight through with no repeated prompt — re-asking for a PIN the user already entered a moment ago would be the "cumbersome" failure mode explicitly flagged as something to avoid. **If no PIN is configured at all**, tapping Edit on a private row must not open the edit panel — there's nothing to verify against, so the same no-PIN guidance that governs the `RevealBar` applies to this entry point too, rather than silently exposing the domain.
+- **Deleting a private constraint requires a fresh PIN check, every time — independent of session unlock.** This corrects an earlier version of this section, which reasoned that since deletion doesn't expose a domain, gating it added friction with no privacy benefit. That reasoning conflated two different things a PIN check can authorize: *revealing/managing* private information (what session unlock is for) versus *authorizing a destructive action* on it (what this is for). They're deliberately kept as separate mechanisms:
+  - **Public constraint deletion is completely unaffected** — trash icon → `ConfirmationDialog` → delete, exactly as it's always worked.
+  - **Private constraint deletion** — trash icon → inline PIN entry (the same `PinEntryForm` component the `RevealBar`'s own pin-entry state uses, so it looks and behaves identically, but is driven by its own, separate state — a successful check here authorizes only this one deletion and never sets or clears the session's `privateUnlocked` state) → on correct PIN, the PIN row closes and the existing masked `ConfirmationDialog` opens ("Are you sure you want to delete this private constraint?" — never the real domain, regardless of whether the row happens to be unlocked for viewing at that moment) → Delete / Cancel from there, unchanged.
+  - **This applies even if private constraints are already unlocked for the session.** Viewing and editing benefit from the session unlock (re-entering a PIN a few seconds after already entering it correctly would be the exact "cumbersome" failure mode this feature was designed to avoid); deleting does not get that exemption, because it's irreversible in a way viewing and editing aren't.
+  - **An incorrect PIN** shows the same quiet inline error as everywhere else, stays on the PIN-entry step, and neither opens the confirmation dialog nor deletes anything.
+  - **If no PIN is configured**, deletion is blocked entirely (no PIN-entry step, no confirmation) with the same neutral "set a PIN in Settings" guidance used elsewhere — never a silent, ungated delete just because there was nothing to check against.
 - **Opening Settings reveals nothing.** Settings has never listed domains and continues not to — the PIN section's explanation line now mentions that the PIN "unlocks private constraints" (§17), but no private domain ever appears on that screen, unlocked or not.
 
 ### Enforcement privacy
