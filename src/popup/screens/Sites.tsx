@@ -1,71 +1,51 @@
-import React, { useState, useCallback } from 'react';
-import type { Constraint, ConstraintBehavior } from '../../shared/types/constraint';
+import React, { useState, useCallback, useEffect } from 'react';
+import type { Constraint } from '../../shared/types/constraint';
 import { useConstraints } from '../hooks/useConstraints';
 import { useToast } from '../context/ToastContext';
 import { Button } from '../components/foundation/Button';
+import { IconButton } from '../components/foundation/IconButton';
 import { Spinner } from '../components/foundation/Spinner';
 import { EmptyState } from '../components/feedback/EmptyState';
 import { ConfirmationDialog } from '../components/feedback/ConfirmationDialog';
 import { ConstraintCard } from '../components/constraints/ConstraintCard';
-import { AddConstraintModal } from '../components/constraints/AddConstraintModal';
-import { EditConstraintModal } from '../components/constraints/EditConstraintModal';
+import { AddIcon } from '../components/icons';
+import type { SitesFocusHint } from '../App';
 import styles from './Sites.module.css';
 
-export const Sites: React.FC = () => {
+export interface SitesProps {
+  onAddConstraint: () => void;
+  onEditConstraint: (constraint: Constraint) => void;
+  focusHint: SitesFocusHint | null;
+  onFocusHintConsumed: () => void;
+}
+
+export const Sites: React.FC<SitesProps> = ({
+  onAddConstraint,
+  onEditConstraint,
+  focusHint,
+  onFocusHintConsumed,
+}) => {
   const [constraints, setConstraints, isLoading] = useConstraints();
   const { showToast } = useToast();
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [editingConstraint, setEditingConstraint] = useState<Constraint | null>(null);
   const [deletingConstraint, setDeletingConstraint] = useState<Constraint | null>(null);
 
-  const existingDomains = constraints.map((c) => c.domain);
-
-  const handleAdd = useCallback((data: {
-    domain: string;
-    behavior: ConstraintBehavior;
-    delayMinutes: number | null;
-    customMessage: string | null;
-  }) => {
-    const newConstraint: Constraint = {
-      id: crypto.randomUUID(),
-      domain: data.domain,
-      behavior: data.behavior,
-      delayMinutes: data.delayMinutes,
-      schedule: null,
-      customMessage: data.customMessage,
-      createdAt: Date.now(),
-      enforcedToday: 0,
-      lastEnforcedAt: null,
-      progressiveDelay: null,
-      isPrivate: false,
-    };
-    setConstraints([...constraints, newConstraint]);
-    showToast(`Added constraint for ${data.domain}`, 'success');
-  }, [constraints, setConstraints, showToast]);
-
-  const handleEdit = useCallback((constraint: Constraint) => {
-    setEditingConstraint(constraint);
-    setIsEditModalOpen(true);
-  }, []);
-
-  const handleSaveEdit = useCallback((data: {
-    domain: string;
-    behavior: ConstraintBehavior;
-    delayMinutes: number | null;
-    customMessage: string | null;
-  }) => {
-    if (!editingConstraint) return;
-    const updated = constraints.map((c) =>
-      c.id === editingConstraint.id
-        ? { ...c, domain: data.domain, behavior: data.behavior, delayMinutes: data.delayMinutes, customMessage: data.customMessage }
-        : c
-    );
-    setConstraints(updated);
-    setEditingConstraint(null);
-    showToast(`Updated constraint for ${data.domain}`, 'success');
-  }, [constraints, setConstraints, editingConstraint, showToast]);
+  // Sites remounts on return from a focused sub-flow (Add/Edit Constraint),
+  // so the calling button/row no longer exists to hold focus — the hint
+  // carried back from App tells us where to restore it. The target button
+  // only exists once useConstraints() finishes its initial load, so wait
+  // for that rather than consuming the hint against an empty-state render.
+  useEffect(() => {
+    if (!focusHint || isLoading) return;
+    const selector =
+      focusHint.type === 'add'
+        ? '[data-focus-target="add-constraint"]'
+        : `[data-edit-id="${focusHint.id}"]`;
+    const target = document.querySelector<HTMLElement>(selector);
+    if (!target) return;
+    target.focus();
+    onFocusHintConsumed();
+  }, [focusHint, onFocusHintConsumed, isLoading, constraints]);
 
   const handleDeleteClick = useCallback((constraint: Constraint) => {
     setDeletingConstraint(constraint);
@@ -76,7 +56,10 @@ export const Sites: React.FC = () => {
     if (!deletingConstraint) return;
     setConstraints(constraints.filter((c) => c.id !== deletingConstraint.id));
     setDeletingConstraint(null);
-    showToast(`Deleted constraint for ${deletingConstraint.domain}`, 'success');
+    showToast(
+      deletingConstraint.isPrivate ? 'Deleted private constraint' : `Deleted constraint for ${deletingConstraint.domain}`,
+      'success'
+    );
   }, [constraints, setConstraints, deletingConstraint, showToast]);
 
   if (isLoading) {
@@ -87,20 +70,32 @@ export const Sites: React.FC = () => {
     );
   }
 
+  const hasConstraints = constraints.length > 0;
+  const deletingLabel = deletingConstraint?.isPrivate ? 'this private constraint' : `the constraint for ${deletingConstraint?.domain}`;
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
         <h2 className={styles.title}>Sites</h2>
-        <Button onClick={() => setIsAddModalOpen(true)}>Add Constraint</Button>
+        {hasConstraints && (
+          <IconButton
+            icon={<AddIcon />}
+            label="Add constraint"
+            title="Add constraint"
+            onClick={onAddConstraint}
+            data-focus-target="add-constraint"
+          />
+        )}
       </div>
 
-      {constraints.length === 0 ? (
+      {!hasConstraints ? (
         <EmptyState
-          icon="◉"
-          title="No constraints yet"
-          description="Add your first constraint to start controlling your browsing habits."
+          title="Nothing constrained yet."
+          description="Add a site you want a pause before opening."
           action={
-            <Button onClick={() => setIsAddModalOpen(true)}>Add Constraint</Button>
+            <Button onClick={onAddConstraint} data-focus-target="add-constraint">
+              Add your first constraint
+            </Button>
           }
         />
       ) : (
@@ -109,30 +104,12 @@ export const Sites: React.FC = () => {
             <ConstraintCard
               key={constraint.id}
               constraint={constraint}
-              onEdit={handleEdit}
+              onEdit={onEditConstraint}
               onDelete={handleDeleteClick}
             />
           ))}
         </div>
       )}
-
-      <AddConstraintModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onAdd={handleAdd}
-        existingDomains={existingDomains}
-      />
-
-      <EditConstraintModal
-        isOpen={isEditModalOpen}
-        onClose={() => {
-          setIsEditModalOpen(false);
-          setEditingConstraint(null);
-        }}
-        onSave={handleSaveEdit}
-        constraint={editingConstraint}
-        existingDomains={existingDomains}
-      />
 
       <ConfirmationDialog
         isOpen={isDeleteDialogOpen}
@@ -142,7 +119,7 @@ export const Sites: React.FC = () => {
         }}
         onConfirm={handleConfirmDelete}
         title="Delete Constraint"
-        message={`Are you sure you want to delete the constraint for ${deletingConstraint?.domain}?`}
+        message={`Are you sure you want to delete ${deletingLabel}?`}
         confirmLabel="Delete"
       />
     </div>

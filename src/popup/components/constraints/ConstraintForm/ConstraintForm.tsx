@@ -2,60 +2,104 @@ import React, { useState, useEffect } from 'react';
 import type { ConstraintBehavior } from '../../../../shared/types/constraint';
 import { validateConstraint } from '../../../../shared/services/validation-service';
 import { normalizeDomain } from '../../../../shared/utils/domain';
+import { useSettings } from '../../../hooks/useSettings';
 import { Input } from '../../foundation/Input';
 import { Button } from '../../foundation/Button';
+import { CheckpointIcon, DelayIcon, LockIcon, HardBlockIcon, type IconProps } from '../../icons';
 import styles from './ConstraintForm.module.css';
 
+export interface ConstraintFormSubmitData {
+  domain: string;
+  behavior: ConstraintBehavior;
+  delayMinutes: number | null;
+  customMessage: string | null;
+  isPrivate: boolean;
+}
+
 interface ConstraintFormProps {
+  mode: 'add' | 'edit';
   initialDomain?: string;
   initialBehavior?: ConstraintBehavior;
   initialDelayMinutes?: number;
-  initialCustomMessage?: string;
+  initialIsPrivate?: boolean;
+  initialReason?: string | null;
   existingDomains?: string[];
-  onSubmit: (data: {
-    domain: string;
-    behavior: ConstraintBehavior;
-    delayMinutes: number | null;
-    customMessage: string | null;
-  }) => void;
-  onCancel: () => void;
+  onSubmit: (data: ConstraintFormSubmitData) => void;
+  onNavigateToSettings: () => void;
 }
 
-const BEHAVIORS: { value: ConstraintBehavior; label: string }[] = [
-  { value: 'checkpoint', label: 'Checkpoint' },
-  { value: 'delay', label: 'Delay' },
-  { value: 'progressive-delay', label: 'Progressive Delay' },
-  { value: 'hard-block', label: 'Hard Block' },
-  { value: 'pin-required', label: 'PIN Required' },
-  { value: 'reflection', label: 'Reflection' },
-  { value: 'custom-message', label: 'Custom Message' },
-  { value: 'scheduled', label: 'Scheduled' },
+type V2Behavior = 'checkpoint' | 'delay' | 'pin-required' | 'hard-block';
+
+/**
+ * Collapses the full behavior enum onto the four V2 values the picker
+ * offers (BOOMRNG-V2-DESIGN-SPEC.md §11). Editing a constraint whose
+ * stored behavior is a legacy value (progressive-delay, scheduled,
+ * reflection, custom-message) pre-selects its closest V2 equivalent;
+ * the stored value only actually changes if the user saves.
+ */
+function toV2Behavior(behavior: ConstraintBehavior): V2Behavior {
+  switch (behavior) {
+    case 'delay':
+    case 'progressive-delay':
+      return 'delay';
+    case 'pin-required':
+      return 'pin-required';
+    case 'hard-block':
+      return 'hard-block';
+    default:
+      return 'checkpoint';
+  }
+}
+
+const BEHAVIORS: {
+  value: V2Behavior;
+  label: string;
+  description: string;
+  Icon: React.FC<IconProps>;
+  friction: number;
+}[] = [
+  { value: 'checkpoint', label: 'Checkpoint', description: 'A quick pause before opening the site.', Icon: CheckpointIcon, friction: 1 },
+  { value: 'delay', label: 'Delay', description: 'Wait for a time you choose before you can continue.', Icon: DelayIcon, friction: 2 },
+  { value: 'pin-required', label: 'PIN Required', description: 'Enter your Boomrng PIN before continuing.', Icon: LockIcon, friction: 3 },
+  { value: 'hard-block', label: 'Hard Block', description: 'No access while this constraint is active.', Icon: HardBlockIcon, friction: 4 },
 ];
 
 export const ConstraintForm: React.FC<ConstraintFormProps> = ({
+  mode,
   initialDomain = '',
   initialBehavior = 'checkpoint',
   initialDelayMinutes,
-  initialCustomMessage,
+  initialIsPrivate = false,
+  initialReason,
   existingDomains = [],
   onSubmit,
-  onCancel,
+  onNavigateToSettings,
 }) => {
+  const [settings] = useSettings();
+  const pinConfigured = Boolean(settings.pin);
+
   const [domain, setDomain] = useState(initialDomain);
-  const [behavior, setBehavior] = useState<ConstraintBehavior>(initialBehavior);
-  const [delayMinutes, setDelayMinutes] = useState<string>(
-    initialDelayMinutes?.toString() ?? ''
-  );
-  const [customMessage, setCustomMessage] = useState(initialCustomMessage ?? '');
+  const [behavior, setBehavior] = useState<V2Behavior>(toV2Behavior(initialBehavior));
+  const [delayMinutes, setDelayMinutes] = useState<number>(initialDelayMinutes ?? 15);
+  const [isPrivate, setIsPrivate] = useState(initialIsPrivate);
+  const [reason, setReason] = useState(initialReason ?? '');
+  // Collapsed by default when creating; a constraint that already has a
+  // reason shows it expanded immediately rather than hiding real content.
+  const [showReason, setShowReason] = useState(Boolean(initialReason));
+  // Distinguishes "revealed just now by the user" from "already expanded
+  // because it loaded with a value" — only the former should autofocus.
+  const [reasonJustRevealed, setReasonJustRevealed] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setDomain(initialDomain);
-    setBehavior(initialBehavior);
-    setDelayMinutes(initialDelayMinutes?.toString() ?? '');
-    setCustomMessage(initialCustomMessage ?? '');
+    setBehavior(toV2Behavior(initialBehavior));
+    setDelayMinutes(initialDelayMinutes ?? 15);
+    setIsPrivate(initialIsPrivate);
+    setReason(initialReason ?? '');
+    setShowReason(Boolean(initialReason));
     setErrors({});
-  }, [initialDomain, initialBehavior, initialDelayMinutes, initialCustomMessage]);
+  }, [initialDomain, initialBehavior, initialDelayMinutes, initialIsPrivate, initialReason]);
 
   const validate = (): boolean => {
     const normalizedDomain = normalizeDomain(domain);
@@ -70,8 +114,9 @@ export const ConstraintForm: React.FC<ConstraintFormProps> = ({
     const validation = validateConstraint(
       domain,
       behavior,
-      delayMinutes ? parseInt(delayMinutes, 10) : undefined,
-      customMessage || undefined
+      behavior === 'delay' ? delayMinutes : undefined,
+      undefined,
+      pinConfigured
     );
 
     const allErrors: Record<string, string> = { ...domainError };
@@ -90,13 +135,11 @@ export const ConstraintForm: React.FC<ConstraintFormProps> = ({
     onSubmit({
       domain: normalizeDomain(domain) || domain,
       behavior,
-      delayMinutes: delayMinutes ? parseInt(delayMinutes, 10) : null,
-      customMessage: customMessage || null,
+      delayMinutes: behavior === 'delay' ? delayMinutes : null,
+      customMessage: reason.trim() || null,
+      isPrivate,
     });
   };
-
-  const showDelay = behavior === 'delay' || behavior === 'progressive-delay';
-  const showCustomMessage = behavior === 'custom-message';
 
   return (
     <form className={styles.form} onSubmit={handleSubmit}>
@@ -106,57 +149,118 @@ export const ConstraintForm: React.FC<ConstraintFormProps> = ({
         value={domain}
         onChange={(e) => setDomain(e.target.value)}
         error={errors.domain}
-        autoFocus
+        autoFocus={mode === 'add'}
       />
 
+      <label className={styles.privacyToggle}>
+        <input
+          type="checkbox"
+          checked={isPrivate}
+          onChange={(e) => setIsPrivate(e.target.checked)}
+          className={styles.privacyInput}
+        />
+        <span className={styles.toggleBox} aria-hidden="true" />
+        <span>
+          <span className={styles.toggleTitle}>Private constraint</span>
+          <span className={styles.toggleHint}>Hide this site&rsquo;s domain from normal Boomrng screens.</span>
+        </span>
+      </label>
+
       <div className={styles.field}>
-        <label className={styles.label}>Behavior</label>
-        <select
-          className={styles.select}
-          value={behavior}
-          onChange={(e) => setBehavior(e.target.value as ConstraintBehavior)}
-        >
-          {BEHAVIORS.map((b) => (
-            <option key={b.value} value={b.value}>
-              {b.label}
-            </option>
-          ))}
-        </select>
+        <span className={styles.label}>Behavior</span>
+        <div className={styles.behaviorList} role="radiogroup" aria-label="Behavior">
+          {BEHAVIORS.map((b) => {
+            const selected = behavior === b.value;
+            return (
+              <label
+                key={b.value}
+                className={`${styles.behaviorRow} ${selected ? styles.selected : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="behavior"
+                  value={b.value}
+                  checked={selected}
+                  onChange={() => setBehavior(b.value)}
+                  className={styles.radioInput}
+                />
+                <span className={styles.rowTop}>
+                  <span className={styles.radioDot} aria-hidden="true" />
+                  <b.Icon className={styles.behaviorIcon} />
+                  <span className={styles.behaviorName}>{b.label}</span>
+                  <span className={styles.frictionDots} aria-hidden="true">
+                    {[1, 2, 3, 4].map((n) => (
+                      <span key={n} className={n <= b.friction ? styles.dotOn : styles.dot} />
+                    ))}
+                  </span>
+                </span>
+                {selected && (
+                  <span className={styles.expand}>
+                    <span className={styles.desc}>{b.description}</span>
+                    {b.value === 'delay' && (
+                      <span className={styles.configInline}>
+                        <span className={styles.miniLabel}>Duration</span>
+                        <span className={styles.stepper}>
+                          <button
+                            type="button"
+                            onClick={() => setDelayMinutes((m) => Math.max(1, m - 5))}
+                            aria-label="Decrease delay"
+                          >
+                            −
+                          </button>
+                          <span className={styles.stepperVal}>{delayMinutes} min</span>
+                          <button
+                            type="button"
+                            onClick={() => setDelayMinutes((m) => Math.min(120, m + 5))}
+                            aria-label="Increase delay"
+                          >
+                            +
+                          </button>
+                        </span>
+                      </span>
+                    )}
+                    {b.value === 'pin-required' && !pinConfigured && (
+                      <span className={styles.warning}>
+                        No PIN set.{' '}
+                        <button type="button" className={styles.warningAction} onClick={onNavigateToSettings}>
+                          Set PIN
+                        </button>
+                      </span>
+                    )}
+                  </span>
+                )}
+              </label>
+            );
+          })}
+        </div>
         {errors.behavior && <p className={styles.error}>{errors.behavior}</p>}
       </div>
 
-      {showDelay && (
+      {showReason ? (
         <Input
-          label="Delay (minutes)"
-          type="number"
-          min={1}
-          max={120}
-          placeholder="5"
-          value={delayMinutes}
-          onChange={(e) => setDelayMinutes(e.target.value)}
-          error={errors.delayMinutes}
+          label="Remind yourself why (optional)"
+          placeholder="I said I'd write, not scroll."
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          autoFocus={reasonJustRevealed}
         />
-      )}
-
-      {showCustomMessage && (
-        <div className={styles.field}>
-          <label className={styles.label}>Custom Message</label>
-          <textarea
-            className={styles.textarea}
-            placeholder="Enter a message to show when this site is visited..."
-            value={customMessage}
-            onChange={(e) => setCustomMessage(e.target.value)}
-            rows={3}
-          />
-          {errors.customMessage && <p className={styles.error}>{errors.customMessage}</p>}
-        </div>
+      ) : (
+        <button
+          type="button"
+          className={styles.addReasonAction}
+          onClick={() => {
+            setShowReason(true);
+            setReasonJustRevealed(true);
+          }}
+        >
+          + Add a reason
+        </button>
       )}
 
       <div className={styles.actions}>
-        <Button type="button" variant="ghost" onClick={onCancel}>
-          Cancel
+        <Button type="submit" className={styles.submitButton}>
+          {mode === 'add' ? 'Add constraint' : 'Save changes'}
         </Button>
-        <Button type="submit">Save Constraint</Button>
       </div>
     </form>
   );

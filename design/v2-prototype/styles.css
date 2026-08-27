@@ -593,14 +593,35 @@ button { font-family: inherit; }
 .form-actions { display: flex; justify-content: flex-end; gap: 4px; margin-top: 18px; }
 .form-actions .btn-primary { width: auto; padding: 9px 16px; height: 36px; }
 
-/* Panel header — title + close, replaces a footer Cancel entirely (§11) */
-.panel-header {
+/* Focused header — replaces the persistent header + bottom nav during
+   Add/Edit Constraint (and later Presets) sub-flows; back arrow is the
+   only dismissal control, same 40px rhythm as .popup-header (§8, §11). */
+.focused-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
+  gap: 6px;
+  height: 40px;
+  padding: 0 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
-.panel-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.focused-title { font-size: 13.5px; font-weight: 600; color: var(--text-primary); }
+
+/* "+ Add a reason" — quiet action revealing the optional reason field;
+   collapsed by default, expanded automatically when editing a constraint
+   that already has one (§11, §21). */
+.add-reason-action { margin: -8px 0 16px; }
+.add-reason-action button {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.add-reason-action button:hover { color: var(--text-secondary); }
 
 /* ---------- private constraints ---------- */
 

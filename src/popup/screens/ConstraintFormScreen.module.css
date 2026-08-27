@@ -1,0 +1,7 @@
+.screen {
+  padding: var(--space-4);
+}
+
+.screen:focus {
+  outline: none;
+}

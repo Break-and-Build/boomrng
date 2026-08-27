@@ -19,6 +19,9 @@ export type { ModalProps } from './Modal';
 export { ProgressBar } from './ProgressBar';
 export type { ProgressBarProps } from './ProgressBar';
 
+export { ProgressArc } from './ProgressArc';
+export type { ProgressArcProps } from './ProgressArc';
+
 export { Toast } from './Toast';
 export type { ToastProps } from './Toast';
 

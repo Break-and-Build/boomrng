@@ -1,11 +1,19 @@
 import type { ConstraintValidation, ValidationError, ConstraintBehavior } from '../types/constraint';
 import { normalizeDomain } from '../utils/domain';
 
+/**
+ * `pinConfigured` is required, not optional — deliberately, so a caller
+ * cannot forget to pass it and accidentally let a `pin-required`
+ * constraint through with no PIN to enforce it against (the exact bug
+ * this parameter exists to close at the business-logic level, not just
+ * in the form's UI state).
+ */
 export function validateConstraint(
   domain: string,
   behavior: ConstraintBehavior,
-  delayMinutes?: number,
-  customMessage?: string
+  delayMinutes: number | undefined,
+  customMessage: string | undefined,
+  pinConfigured: boolean
 ): ConstraintValidation {
   const errors: ValidationError[] = [];
 
@@ -28,6 +36,10 @@ export function validateConstraint(
     } else if (customMessage.length > 500) {
       errors.push({ field: 'customMessage', message: 'Message must be under 500 characters' });
     }
+  }
+
+  if (behavior === 'pin-required' && !pinConfigured) {
+    errors.push({ field: 'behavior', message: 'Set a Boomrng PIN before using PIN Required.' });
   }
 
   return { isValid: errors.length === 0, errors };

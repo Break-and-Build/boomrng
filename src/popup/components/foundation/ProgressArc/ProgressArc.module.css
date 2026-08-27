@@ -1,0 +1,16 @@
+.wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.fill {
+  transition: stroke-dasharray 300ms ease, stroke 150ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill {
+    transition: none;
+  }
+}

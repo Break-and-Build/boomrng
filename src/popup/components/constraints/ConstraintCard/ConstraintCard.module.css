@@ -17,6 +17,25 @@
   font-size: var(--text-body);
   font-weight: 500;
   color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Placeholder label, not real data — sans-serif italic instead of mono,
+   so it never reads as though it were the actual identifier (§10). */
+.domainPrivate {
+  font-family: var(--font-sans);
+  font-style: italic;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.lockIcon {
+  width: 12px;
+  height: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .actions {

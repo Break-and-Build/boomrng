@@ -3,7 +3,7 @@
   flex-direction: column;
   width: 360px;
   min-height: 420px;
-  max-height: 560px;
+  max-height: 600px;
   background: var(--canvas);
   overflow: hidden;
 }

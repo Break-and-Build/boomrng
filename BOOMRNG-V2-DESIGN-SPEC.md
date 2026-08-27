@@ -227,12 +227,13 @@ This directly answers the request to avoid "every piece of information lives ins
 ## 8. Popup Shell
 
 - **Width:** `360px` (up from the current unstyled default) — enough room for domain + badge + actions on one row without truncation, still well within normal Chrome popup conventions.
-- **Height:** minimum `420px`, grows with content up to `560px`, scrolls internally beyond that (Chrome's own popup viewport caps around 600px regardless).
+- **Height:** minimum `420px`, grows with content up to `600px`, scrolls internally beyond that. Content-driven within that band — a screen renders at its own natural height, not a fixed box; raising the ceiling doesn't add space to screens that don't need it. `600px` (raised from an earlier `560px`) was chosen after measuring the real Add Constraint interactive states (Delay/PIN Required selected with the optional reason revealed) directly: at `560px` the tallest of those states clipped by up to 48px, a subtle scrollbar-only cue that undersold how close the content actually was to fitting. At `600px` that same state is reduced to an imperceptible 1–8px sliver, while every shorter screen (Dashboard, Settings, empty Sites, the default Add Constraint view) is completely unaffected, since none of them ever reached the old ceiling to begin with. `600px` was chosen over a taller `620px` specifically to stay inside Chrome's own conventional popup ceiling — historically observed around `600px` and not reliably documented beyond it — rather than risk Chrome silently clipping the popup itself.
 - **Header (persistent across all three screens):** a single `40px` row — arc mark (§4) + "boomrng" wordmark, left-aligned; a small status dot, right-aligned (`--accent` filled = at least one constraint active, `--text-muted` outline = none yet). This row is the *entire* answer to "is Boomrng active" (§9's question 1) — it does not repeat on every screen as a redundant page title.
 - **Bottom navigation:** kept — three items (Dashboard / Sites / Settings), text label + small icon, no change to the *pattern* the audit already validated. Restyled: active item gets a short accent-colored underline beneath its label (tying into the arc motif, §3) instead of a filled background pill; inactive items are `--text-secondary`.
 - **Page transitions:** `140ms` crossfade + `4px` vertical settle, `ease-out`. Instant (opacity-only, no movement) under `prefers-reduced-motion`.
 - **Safe spacing:** the `16px` horizontal margin is owned by the shell, not by individual screens — no screen should redeclare its own left/right padding.
 - **Five-second understanding:** achieved by the header (status), the Dashboard's first line (what's active), and the Tab Budget card (capacity) all being visible without scrolling on first open — see §9 for the exact composition.
+- **Focused sub-flows may hide both the header and the bottom navigation.** Add/Edit Constraint (§11) is the first case: neither the persistent header nor the three-screen navigation is relevant while filling out a single focused form, and hiding both reclaims their height rather than shrinking the content around them. A lightweight focused header (back arrow + title) replaces the persistent one for the duration. This is a shell-level capability, not a one-off exception — Presets (§29) reuses the identical mechanism.
 
 ---
 
@@ -352,10 +353,10 @@ These four lines are final V2 copy, not placeholders — short enough that showi
 
 The friction dots alone carry the "Checkpoint is lightest, Hard Block is firmest" message even when a row is collapsed — a user never needs to expand all four to understand the ordering.
 
-**Full flow, current (simplified) version:**
+**Full flow — final architecture: a dedicated screen, not a modal or a floating panel.**
 
 ```
-Add constraint                                 ×
+←  Add constraint
 
 Domain
 [ youtube.com                      ]
@@ -377,31 +378,47 @@ Behavior
 │ ○ ⊘ Hard Block              ●●●●   │
 └────────────────────────────────────┘
 
-Remind yourself why (optional)
-[ I said I'd write, not scroll.     ]
++ Add a reason
 
                             [ Add constraint ]
 ```
 
 (Delay/PIN Required/Hard Block render collapsed to one line each in this example, since Checkpoint is selected; selecting any other row collapses Checkpoint in turn and expands that row in place.)
 
-**The full-page live preview from the first version of this flow has been removed from the production creation screen.** It was genuinely useful during this design pass — it's how the button-hierarchy and copy problems elsewhere in this document got caught before implementation — but it does not earn its vertical cost inside a 360px popup on every single constraint a user ever creates. The "understand the consequence before saving" goal is now carried by the friction dots, the one-line description, and (once built) the Checkpoint page itself being fast enough to see for real on the first visit. Live-previewing every enforcement page inline is reclassified as a **V2 Later** exploration (e.g., as a one-time onboarding moment, §18) rather than a permanent fixture of every constraint creation.
+**Architecture correction — this section's second revision.** The first version specified a centered `Modal`; the second proposed a `SlidePanel` floating over Sites. Both were wrong for the same underlying reason, confirmed by measuring the shipped Modal implementation directly: a floating card — centered, bordered, capped at `90vh`, with its own header and body padding — costs roughly **104px of pure chrome** (40px header + 32px body padding + 32px of overlay centering padding) before a single form field renders, inside a popup whose *entire* height budget tops out at 600px (560px at the time of this measurement — see §8). Measured against the actual form, the shortest possible configuration (Checkpoint selected) already required internal scrolling *inside the already-nearly-full-height card*. That is the real cause of the crowded feeling reported after this flow shipped — not the amount of information in the form, which testing confirmed was already right.
 
-**Private constraint toggle** sits directly under the Domain field — see §26 for the full design of this feature. It is a property of the domain, not of the behavior, so it belongs beside the field it's protecting, not buried near Save.
+**The fix: Add Constraint and Edit Constraint are first-class dedicated screens**, not an overlay of any kind:
 
-Selecting a behavior expands its row **inline, in place** — this is one continuous screen, not a wizard with forward/back steps.
+- **The persistent app header (arc mark, wordmark, status dot) and the bottom navigation are both hidden** while this screen is active. Neither is relevant mid-creation, and hiding both reclaims their combined height for the form.
+- **A lightweight focused header replaces them:** a back arrow (`IconButton`, `aria-label="Back to Sites"`) followed by a plain text title — `"Add constraint"` or `"Edit constraint"` depending on mode. No `×`, no modal-style header bar with its own border-and-padding budget — this is the same 40px-tall header rhythm already established elsewhere in the shell (§8), reused, not a new chrome element invented for this one screen.
+- **The form occupies the full popup body**, `16px` padding, exactly like Dashboard/Sites/Settings already do. **No card. No border around the form. No drop shadow.** It is the popup's content, not a thing floating on top of the popup's content.
+- **One natural page scroll, never a nested scrollport.** If the content exceeds the popup's height, the screen itself scrolls — there is no inner scrolling container competing with an outer one.
+- **Back returns to Sites.** It is the *only* dismissal control (see Navigation & Focus below) — there is no second `×` anywhere on this screen.
 
-**The primary action is explicit text, never an icon, and there is no separate Cancel button.** Two corrections from the first version of this section:
+This supersedes both earlier proposals in this section. `SlidePanel` as a distinct component is retired — a "panel that slides in from the side" and "a dedicated screen" solve the same navigational need, and only the screen version actually removes the chrome overhead that caused the problem. Component inventory and screen inventory are updated accordingly (§23, §24).
 
-1. **The primary action says what it does, in words — "Add constraint" when creating, "Save changes" when editing an existing one.** A checkmark or similar icon is ambiguous for a state-changing action a user might only take occasionally; per the general icon/text principle (§27), this is exactly the category of action that keeps its label. The button is compact — auto-width, ~36px tall, sized to its text — not the full-width 40px treatment reserved for enforcement pages' single dominant action (§7). It sits alone, bottom-right.
-2. **There is no footer Cancel button.** The panel's own header carries a `×` close control instead — visually identical to the existing `Modal` component's close button, and built from the same interaction: dismisses on click, responds to `Escape`, and **preserves the existing focus-restoration behavior** (focus returns to whatever triggered the panel, exactly as `Modal` already does today — nothing about that mechanism changes). `aria-label="Close"`. Keeping both a header `×` and a footer "Cancel" was two controls doing the identical job for no added clarity; removing one shrinks the footer to a single action and recovers real vertical and horizontal space in a 360px surface. If unsaved-changes protection (a "discard changes?" prompt) is ever warranted, that's a deliberate future addition on top of the `×` — not a reason to keep a permanent Cancel button today for symmetry's sake.
+**The full-page live preview from the first version of this flow remains removed from the production creation screen**, for the same reason as before: it doesn't earn its vertical cost on every single constraint a user creates. The "understand the consequence before saving" goal is carried by the friction dots, the one-line description, and the enforcement page itself being fast to see for real on first visit. Reclassified as **V2 Later** (§18), not reconsidered here.
 
-**Interaction pattern: replace the centered Modal with a slide-in panel**, entering from the right and covering the Sites screen's content (not the whole popup chrome — header and the sense of "still in Sites" should persist). This is a deliberate departure from V1's modal-over-modal pattern:
-- It avoids the "box inside a box inside the popup" feeling that centered modals create in an already-small 360px surface.
-- It reads as *forward navigation* ("going deeper to configure something") rather than *interruption* ("a dialog popped up over what you were doing"), which better matches the "intentional, not interruptive" personality goal (§2).
-- The panel's own `×` (top-right of its header, see above) closes it and returns to Sites exactly where the user left it — there is no separate back-chevron affordance; one dismiss control is enough.
+**Private constraint toggle** sits directly under the Domain field — see §26. It's a property of the domain, not the behavior, so it belongs beside the field it protects.
 
-The existing `Modal` component (§14 of the audit — genuinely well-built, real focus trap) is **not discarded** — it's kept for short, single-decision confirmations (delete constraint) where a true interrupting dialog is the correct pattern, and its header `×` is the direct model for the new panel's own close control. The new `SlidePanel` component is specifically for multi-field, "configuring something" flows. Two patterns, each used for what it's actually good at, is not scope creep — using the wrong one everywhere is the thing being fixed.
+**Optional reason — collapsed by default, a density refinement on top of the architecture change.** The reason field (stored on `Constraint.customMessage` — the same field the retired custom-message behavior used, repurposed rather than duplicated, since that behavior never displayed it anywhere and the field was otherwise dead) does not render as an open textarea by default when creating a constraint. Instead, a quiet ghost text action — *"+ Add a reason"* — sits where the field would be; selecting it reveals the actual input in place. **Editing a constraint that already has a stored reason shows the field expanded immediately** — there is nothing to disclose progressively when the information already exists and the user came here to see it. The reason stays optional either way, and every previously-stored reason continues to load and save correctly; this is a presentation change, not a data change.
+
+Selecting a behavior expands its row **inline, in place** — this is one continuous screen, not a wizard with forward/back steps. That remains true whether the screen is reached directly or (later) via a preset review step (§29).
+
+**The primary action is explicit text, never an icon, and there is no Cancel button anywhere on this screen.** Unchanged from the previous revision of this decision:
+
+1. **The primary action says what it does, in words — "Add constraint" when creating, "Save changes" when editing.** A checkmark or similar icon is ambiguous for a state-changing action taken occasionally; per the icon/text principle (§27), this keeps its label. The button is compact — auto-width, ~36px tall — not the full-width 40px treatment reserved for enforcement pages' single dominant action (§7). It sits alone, bottom-right.
+2. **There is still no Cancel button.** On the old Modal, the header `×` did this job; on the new screen, the back arrow does. One dismissal control, doing one job, is enough regardless of which container holds the form. If unsaved-changes protection is ever warranted, that's a deliberate future product decision layered on top of plain Back — not a default to reach for now merely because this is a screen instead of a dialog (see Navigation & Focus).
+
+**Navigation & focus, now that this is a screen and not a dialog:**
+- **No focus trap.** A dialog traps focus because there's a page behind it the user could accidentally tab into; a full screen has nothing else rendered at all while it's active (the header and bottom nav are hidden, not just visually covered), so there's nothing to trap focus away from. Tab moves through the screen's own elements in plain document order.
+- **Escape is a deliberate choice, not an inheritance from `Modal`.** It triggers the same action as the back arrow. This was decided explicitly rather than carried over, because a screen's Escape behavior isn't implied by anything — a dialog's is.
+- **Domain autofocuses only in Add mode.** In Edit mode, the field already holds a real value; autofocusing it would place a cursor in existing text as the very first thing that happens, which reads as an accidental edit waiting to happen rather than an invitation to type. Edit mode instead focuses the screen itself, so keyboard and screen-reader users land at a sensible, deliberate starting point without an unintended text-cursor side effect.
+- **Returning to Sites restores focus sensibly, not by accident.** After Add, focus returns to the control that opened the flow (the empty-state button or the header `+`). After Edit, focus returns to the specific row's Edit button. Sites remounts fresh each time (the simplest correct architecture, per below) — this only works because the return path explicitly carries *what to focus*, not because a DOM node happened to survive.
+
+**The simplest architecture that also leaves room for Presets (§29):** a single piece of state, owned where the header and bottom navigation are already controlled, represents "a focused sub-flow is active" as an alternative to the normal three-screen switch — not a new router, not a navigation stack. Returning from the flow clears that state and lands back on the calling screen. Presets' own multi-step flow (gallery → review → behavior → confirm) is more of the same kind of state, reusing the identical hide-header/hide-nav/full-body shell — it does not require revisiting this decision when it's built.
+
+The existing `Modal` component (well-built, real focus trap) is **not discarded** — it remains correct for short, single-decision confirmations (delete constraint), which is a genuinely different interaction than "fill out a form": something the user must resolve before continuing, layered over content that's still relevant behind it. Add/Edit Constraint is the opposite of that — the calling screen isn't relevant while it's happening, which is exactly why it stops using a dialog.
 
 ---
 
@@ -668,14 +685,16 @@ All icons share stroke weight and are drawn on the same grid so they sit consist
 | Dashboard — active | "3 constraints active" |
 | Dashboard — empty | "Nothing constrained yet." / "Add a site you want a pause before opening." |
 | Sites — empty | "Nothing here yet." / "Add your first constraint to get started." |
-| Add constraint — panel title / close | "Add constraint" (title) · `×` with `aria-label="Close"` (§11, §27) |
-| Edit constraint — panel title | "Edit constraint" |
+| Add constraint — focused header | "Add constraint" (title) · back arrow, `aria-label="Back to Sites"` (§11, §27) |
+| Edit constraint — focused header | "Edit constraint" (title) · same back arrow |
 | Add constraint — primary action (create) | "Add constraint" — compact, text, never an icon (§27) |
 | Add constraint — primary action (edit) | "Save changes" |
 | Add constraint — domain error | "Enter a valid domain, like twitter.com." |
 | Add constraint — duplicate | "This domain already has a constraint." |
 | Add constraint — save confirmation | *(no toast needed — the new row itself is the confirmation, §19)* |
 | Add constraint — behavior descriptions | Checkpoint: "A quick pause before opening the site." · Delay: "Wait for a time you choose before you can continue." · PIN Required: "Enter your Boomrng PIN before continuing." · Hard Block: "No access while this constraint is active." (§11) |
+| Add constraint — reason, collapsed | "+ Add a reason" (ghost text action; expands the field in place, §11) |
+| Add constraint — reason, expanded | Label: "Remind yourself why (optional)" |
 | Sites — add button (populated state) | icon only, `+`, `aria-label="Add constraint"`, native tooltip on hover/focus (§10, §27) |
 | Checkpoint — headline (normal) | "You were heading to [domain]." |
 | Checkpoint — headline (private, §26) | "This site is constrained." |
@@ -733,7 +752,8 @@ All icons share stroke weight and are drawn on the same grid so they sit consist
 |---|---|---|---|---|---|
 | Dashboard | At-a-glance status | Default popup view | Tap a constraint row → edit | "Add first constraint" (empty state) | Empty, populated, over-budget, private constraints rolled up |
 | Sites | Manage constraints | Bottom nav | Icon-only `+` (populated) / "Add your first constraint" (empty, never both, §10) | Edit / delete per row, unlock private constraints | Empty, populated, private constraints locked / unlocked / no-PIN-set |
-| Add/Edit Constraint (slide panel) | Create or modify a constraint | `+` (Sites), "Add your first constraint" (empty state), or row tap (edit) | "Add constraint" (create) / "Save changes" (edit) — compact, text, §7/§11/§27 | `×` close in the header, not a footer Cancel (§11) | Compact accordion (one behavior expanded at a time), private toggle on/off, validation error — no live preview in production (§11) |
+| Add Constraint (dedicated screen) | Create a constraint | `+` (Sites, populated) or "Add your first constraint" (Sites, empty) | "Add constraint" — compact, text, §7/§11/§27 | Back (arrow, header) — no Cancel (§11) | Compact accordion (one behavior expanded at a time), private toggle, reason collapsed by default, validation error — no live preview in production (§11) |
+| Edit Constraint (dedicated screen, same component as Add) | Modify an existing constraint | Row's Edit control on Sites | "Save changes" — compact, text | Back (arrow, header) — no Cancel | Same as Add, pre-filled; reason expanded automatically if already set (§11) |
 | Settings | PIN, Tab Budget, Data, About | Bottom nav | Section-specific (Save PIN, etc.) | — | PIN set / not set, exporting (with/without private constraints, §26), importing |
 | Checkpoint (enforcement) | The signature pause | DNR redirect on constrained domain visit | "Back to what I was doing" | "Continue to [domain] anyway" | With/without personal reason; normal vs. private (domain withheld, §26) |
 | Delay (enforcement) | Timed pause | DNR redirect, `delay` behavior | "Back to what I was doing" | "Continue" (appears only on completion) | Running, complete, refreshed mid-countdown; normal vs. private |
@@ -741,7 +761,7 @@ All icons share stroke weight and are drawn on the same grid so they sit consist
 | Hard Block (enforcement) | Firm boundary | DNR redirect, `hard-block` behavior | "Back to what I was doing" | — (none) | Single state; normal vs. private (domain withheld) |
 | Tab Budget (enforcement) | Over-limit recovery | Tab-count listener redirect | "Close oldest tab" | Per-row `[×]` close | Over budget, resolved (auto-continues) |
 
-Nine surfaces total — the same three popup screens as today plus the five enforcement pages plus one new interaction pattern (the slide panel), no net increase in navigational complexity despite the deeper redesign. Private Constraints (§26) is deliberately **not** a tenth surface — it's a property and a handful of states layered onto Add/Edit Constraint, Dashboard, Sites, and four of the five enforcement pages, not a new screen anyone navigates to.
+Ten surfaces total — the three popup screens, Add and Edit Constraint as their own dedicated screens (sharing one implementation, §11), and the five enforcement pages. Add/Edit Constraint reuses the popup shell's own focused-sub-flow capability (§8) rather than introducing a new interaction primitive, so this still isn't a meaningfully larger surface than the "nine, plus a slide panel" count from the previous revision of this table — it's the same idea, correctly built. Private Constraints (§26) remains **not** a surface of its own — it's a property and a handful of states layered onto the screens above.
 
 ---
 
@@ -752,7 +772,7 @@ Kept intentionally small — this is a browser-action popup and five static page
 | Component | Purpose | Variants | States |
 |---|---|---|---|
 | `Button` | Primary actions | primary (filled accent), secondary (bordered), ghost (text-only) | default, hover, focus, active, disabled, loading |
-| `IconButton` | Compact icon-only actions (Sites' `+`, edit, delete, panel/modal `×`) | default, danger (delete) | default, hover, focus, disabled. Always carries an `aria-label` (its only accessible name) and a native tooltip (`title`) on hover/focus; hit area is padded to at least 32×32px regardless of the visible icon's size (§10, §27) |
+| `IconButton` | Compact icon-only actions (Sites' `+`, edit, delete, the focused-screen back arrow, the confirmation `Modal`'s `×`) | default, danger (delete) | default, hover, focus, disabled. Always carries an `aria-label` (its only accessible name) and a native tooltip (`title`) on hover/focus; hit area is padded to at least 32×32px regardless of the visible icon's size (§10, §27) |
 | `Input` | Text/number entry | text, number, password | default, focus, error, disabled |
 | `PINInput` | Masked digit entry with auto-submit | single-field (not segmented boxes — simpler, same accessibility properties) | default, error (shake), disabled |
 | `BehaviorRow` *(renamed from `BehaviorOption`, §11)* | One row in the compact behavior accordion | collapsed, selected/expanded | default, hover, focus; expanded state renders its own description + config inline |
@@ -763,8 +783,9 @@ Kept intentionally small — this is a browser-action popup and five static page
 | `RevealBar` *(new, §26)* | Sites-screen control for unlocking private constraints for the session | locked, pin-entry, unlocked, no-pin-set | default; unlocked persists only for the popup session |
 | `ProgressArc` | Radial arc — Delay countdown, Tab Budget ring | closing (Delay), capacity (Tab Budget) | animating, static (reduced-motion), complete |
 | `ProgressBar` *(kept as a distinct, simpler primitive)* | Any future linear-only progress need | — | — |
-| `Modal` | Short, single-decision confirmations (delete) | default | open, closing |
-| `SlidePanel` | Multi-field configuration flows (Add/Edit Constraint) | default | opening, open, closing. Header carries the same `×` `IconButton` as `Modal` (§11) — no separate footer Cancel, no back-chevron; the footer holds only the primary action, compact and text-labeled |
+| `Modal` | Short, single-decision confirmations (delete) **only** — no longer used for Add/Edit Constraint (§11) | default | open, closing |
+| `FocusedHeader` *(new, replaces `SlidePanel`, §11)* | Lightweight header for a focused sub-flow: back arrow + title, hides the persistent app header while active | default | default, focus (back button) |
+| `ConstraintFormScreen` *(new, replaces `AddConstraintModal`/`EditConstraintModal`, §11)* | The dedicated Add/Edit Constraint screen — `FocusedHeader` + the existing form fields, full popup body, no card | add, edit | Same content states as the form always had; no dialog-specific states (no trap, no `×`) |
 | `Toast` | Only for actions with no other visible confirmation (import success/failure) | success, error | entering, visible, exiting |
 | `Section` | Settings grouping | default | — |
 | `EmptyState` | Zero-content states (Dashboard, Sites) | default | — |
@@ -909,6 +930,62 @@ A public Boomrng marketing/product page is part of the V2 program, but it is exp
 **The hard constraint this places on the extension itself:** the popup and enforcement pages must remain fully understandable on their own, without ever requiring a visit to the landing page to make sense. The landing page explains and markets Boomrng to someone deciding whether to install it; it is not where unclear in-product copy gets clarified after the fact. If a future reviewer finds themselves wanting to add "see our website for details" to any in-extension copy, that's a signal the in-extension copy needs fixing, not a justification for the link.
 
 Not designed further in this document — this section only fixes *that* it exists, *when* it happens, and *what it must not be used to paper over*.
+
+---
+
+## 29. Presets — Documented Now, Not Built This Milestone
+
+A product feature worth designing properly and building later, not something to bolt onto the Add Constraint flow as an afterthought. **Named "Presets."** Not "Quick Sets," and specifically not "frequently blocked sites" — the name should describe what the feature does (start from a curated group) without presupposing why the user wants each site constrained.
+
+**Why this isn't built now:** the flow this needs — pick a preset, review its sites, add/remove entries, choose a behavior, confirm, then create several constraints at once — is a genuine second creation flow, not a variation of the existing one. It needs its own review screen, its own confirm step, and (for one preset specifically) its own privacy handling. That's real new surface area, not an "extremely isolated" addition, so per this correction's own instructions it's designed here and deferred, not half-built.
+
+### Where it lives
+
+A quiet secondary entry point on Sites, **not a second prominent button**: below the primary "Add your first constraint" CTA in the empty state (or near the populated header's `+`), a plain ghost text link — *"or start from a preset"*. This deliberately does not compete with the single-CTA rule just fixed elsewhere in this document (§10) — one thing draws the eye, the second path is present but quiet.
+
+### The flow reuses the focused-flow shell, not a new one
+
+Every step below (gallery, review-and-edit, behavior choice, confirm) is a screen using the exact same shell Add/Edit Constraint already established (§8, §11): persistent header and bottom navigation hidden, a focused header with a back arrow, full popup body, one natural scroll, no card. The "behavior choice" step is literally the same `ConstraintFormScreen`'s behavior accordion, applied to a batch instead of one domain, not a rebuilt picker. This is the entire point of building the focused-flow shell as reusable state rather than a one-off for Add Constraint: Presets is a sequence of screens using that same mechanism, not a reason to invent a second one.
+
+Exactly the sequence in the brief, with nothing skipped:
+
+1. **Presets** entry point → a gallery of named presets, each with a one-line description (not their domains yet — the gallery itself stays as compact and scannable as the behavior picker):
+   - **Social Media** — "Pause before opening social apps."
+   - **Video & Entertainment** — "Pause before streaming and video sites."
+   - **News** — "Pause before news sites."
+   - **Shopping** — "Pause before shopping sites."
+   - **Adult Content** — "Add private constraints for common adult sites." (see below — this one is deliberately worded differently from the other four)
+2. **Selecting a preset shows its included sites**, each pre-checked, individually removable, with an "Add a site" affordance to include one the curated list missed. Nothing is created yet.
+3. **One behavior choice applies to the whole batch** — the same compact V2 accordion component from §11, reused rather than rebuilt, not a per-site choice (the point of a preset is speed).
+4. **A confirm screen states plainly what's about to happen** — *"This will create 5 constraints with Checkpoint."* — before anything is written. A preset must never silently create constraints; this step is not optional.
+5. **Create.** The N constraints are written in one batch, then the user lands back on Sites seeing the result.
+
+### Example site lists — illustrative, not final
+
+| Preset | Example sites |
+|---|---|
+| Social Media | facebook.com, instagram.com, tiktok.com, x.com, youtube.com |
+| Video & Entertainment | (to be curated — YouTube arguably belongs here as much as under Social Media; needs one owner's judgment, not two overlapping guesses) |
+| News | (to be curated) |
+| Shopping | (to be curated) |
+| Adult Content | (deliberately not enumerated in this document — see below) |
+
+These are **examples to design against, not a committed hardcoded list to ship without review.** Whoever builds this should treat the actual final domain lists as a real content decision (they'll age, they'll need regional judgment calls, some services move categories), not something this document freezes in place.
+
+### The Adult Content preset, specifically
+
+This one needs more care than the other four, and is worded differently on purpose:
+
+- **Label:** "Adult Content." **Supporting text, visible in the gallery before it's even selected:** *"Add private constraints for common adult sites."* — the private-by-default behavior is disclosed at the point of choosing, not discovered later.
+- **Explicit, unhedged limitation, shown on the preset itself:** this does not claim to block "all adult content" or "all pornography." A curated domain list can only ever cover known, common, named sites — it is not content classification, not a filter, and not comprehensive. State this plainly in the preset's own description, not just in a design document nobody using the product will read.
+- **Constraints created from this preset default to `isPrivate: true`.** The other four presets default to `false` (there's nothing sensitive about pausing before checking the news). The user can still uncheck privacy for an individual site during the review step (§1's user-remains-in-control principle applies here too) — but the default is private, and changing that is a deliberate action, not the path of least resistance.
+- **The review step (step 2 above) necessarily shows real domains in plaintext** — the brief requires the user be able to review and remove entries, which is impossible without seeing what they are. This is a deliberate, momentary, user-initiated exposure during an active setup flow the user just chose to start, categorically different from a domain leaking into a screen the user is casually glancing at. Once the constraints are created, they immediately fall under the same masking as any other private constraint (§26) — nothing about being preset-sourced changes that.
+- **Opening this specific preset's review screen should itself request the Boomrng PIN first, if one is configured** — treated the same as any other private-constraint reveal moment (§26), not a new mechanism. If no PIN is configured, use the same disclosed-but-not-blocking pattern already established for the private-constraint toggle elsewhere in this document (§26's "no PIN set" warning) rather than inventing a harder gate that's inconsistent with how privacy works everywhere else in the product.
+- **No new privacy model.** Once created, a constraint from this preset is an ordinary private constraint — same masking on Dashboard and Sites, same reveal-with-PIN flow, same export/import policy (§26). The preset is a faster on-ramp to a constraint that already has a fully documented privacy story; it doesn't need its own.
+
+### Documented privacy implications, summarized
+
+The feature that needs the most care here isn't the mechanics of batch-creation — it's making sure the one preset dealing with sensitive content (a) says what it actually does and doesn't do, (b) defaults to the protection its own category implies, and (c) never treats "the user is actively setting this up right now" as equivalent to "it's fine to show this domain casually later." All three are addressed above; none of them should be re-litigated ad hoc when this actually gets built.
 
 ---
 

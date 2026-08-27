@@ -14,16 +14,26 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
   const overlayRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const wasOpenRef = useRef(false);
 
   const getFocusableElements = useCallback(() => {
     if (!contentRef.current) return [];
     return Array.from(contentRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTORS));
   }, []);
 
+  // Captured during render, on the transition to open, not in an effect:
+  // if a child inside the modal has its own `autoFocus` (ConstraintForm's
+  // Domain input does), that autoFocus applies during the same commit
+  // that mounts the modal, before any effect runs — by the time an
+  // effect could read `document.activeElement`, it would already be
+  // that child, not whatever was focused before the modal opened.
+  if (isOpen && !wasOpenRef.current) {
+    previousFocusRef.current = document.activeElement as HTMLElement;
+  }
+  wasOpenRef.current = isOpen;
+
   useEffect(() => {
     if (!isOpen) return;
-
-    previousFocusRef.current = document.activeElement as HTMLElement;
 
     const timer = setTimeout(() => {
       contentRef.current?.focus();

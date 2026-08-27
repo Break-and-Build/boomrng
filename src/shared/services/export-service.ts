@@ -40,12 +40,18 @@ export async function importData(data: ExportData): Promise<{ success: boolean; 
     return { success: false, errors };
   }
 
+  // Validate against the PIN the import itself would leave in place, not
+  // whatever's currently stored — an export/import round trip that
+  // carries both a PIN and pin-required constraints together is valid.
+  const pinConfigured = Boolean(data.settings?.pin);
+
   for (const constraint of data.constraints) {
     const validation = validateConstraint(
       constraint.domain,
       constraint.behavior,
       constraint.delayMinutes ?? undefined,
-      constraint.customMessage ?? undefined
+      constraint.customMessage ?? undefined,
+      pinConfigured
     );
     if (!validation.isValid) {
       errors.push(`Invalid constraint for ${constraint.domain}: ${validation.errors.map((e) => e.message).join(', ')}`);

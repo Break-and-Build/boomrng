@@ -64,6 +64,54 @@ export function AddIcon(props: IconProps): React.ReactElement {
   );
 }
 
+/** Reused for "private constraint" (§20 addendum) — same glyph as PIN Required. */
+export function LockIcon(props: IconProps): React.ReactElement {
+  return (
+    <UiIcon {...props}>
+      <rect x="5.5" y="9" width="9" height="6.5" rx="1.3" />
+      <path d="M7.3 9V6.8a2.7 2.7 0 0 1 5.4 0V9" />
+    </UiIcon>
+  );
+}
+
+/** Open arc + dot — the pause-and-choose glyph (§20). */
+export function CheckpointIcon(props: IconProps): React.ReactElement {
+  return (
+    <UiIcon {...props}>
+      <path d="M14.7 6.2A6 6 0 1 1 6 4" />
+      <circle cx="14.8" cy="6.1" r="1" fill="currentColor" stroke="none" />
+    </UiIcon>
+  );
+}
+
+/** Partial ring, distinct opening from Checkpoint's — ties to the Delay page's own closing ring (§20). */
+export function DelayIcon(props: IconProps): React.ReactElement {
+  return (
+    <UiIcon {...props}>
+      <path d="M16 10.6A6 6 0 1 1 9.7 4" />
+    </UiIcon>
+  );
+}
+
+/** A boundary, not a prohibition sign — no red, no diagonal slash (§20). */
+export function HardBlockIcon(props: IconProps): React.ReactElement {
+  return (
+    <UiIcon {...props}>
+      <circle cx="10" cy="10" r="6.4" />
+      <line x1="5.6" y1="10" x2="14.4" y2="10" />
+    </UiIcon>
+  );
+}
+
+/** Focused-screen back arrow (§8, §11) — a familiar, reversible utility action (§27). */
+export function BackIcon(props: IconProps): React.ReactElement {
+  return (
+    <UiIcon {...props}>
+      <path d="M12.5 5L7.5 10L12.5 15" />
+    </UiIcon>
+  );
+}
+
 /**
  * The Boomrng product mark — Concept A, "Smooth Arc" (§4). Locked as the
  * V2 direction; first pass only, not final artwork.

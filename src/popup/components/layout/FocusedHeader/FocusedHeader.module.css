@@ -1,0 +1,17 @@
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 var(--space-3);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-heading);
+  font-weight: 600;
+  color: var(--text-primary);
+}

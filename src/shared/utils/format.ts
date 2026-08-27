@@ -28,6 +28,44 @@ export function formatBehaviorDescription(behavior: ConstraintBehavior): string 
   return descriptions[behavior];
 }
 
+export type V2BehaviorLabel = 'Checkpoint' | 'Delay' | 'PIN Required' | 'Hard Block';
+
+/**
+ * Collapses the full 8-value behavior enum onto the four V2 names
+ * (BOOMRNG-V2-DESIGN-SPEC.md §11), for surfaces that must not expose the
+ * unfinished/legacy concepts (progressive-delay, scheduled, reflection,
+ * custom-message) prominently. Mapping matches what each behavior
+ * actually enforces as today (rules-builder.ts's getBehaviorPagePath),
+ * so it stays accurate without touching the underlying data model.
+ */
+export function toV2BehaviorLabel(behavior: ConstraintBehavior): V2BehaviorLabel {
+  switch (behavior) {
+    case 'delay':
+    case 'progressive-delay':
+      return 'Delay';
+    case 'pin-required':
+      return 'PIN Required';
+    case 'hard-block':
+      return 'Hard Block';
+    default:
+      return 'Checkpoint';
+  }
+}
+
+export function toV2BehaviorBadgeVariant(label: V2BehaviorLabel): 'info' | 'warning' | 'default' | 'error' {
+  switch (label) {
+    case 'Delay':
+      return 'warning';
+    case 'PIN Required':
+      return 'default';
+    case 'Hard Block':
+      return 'error';
+    case 'Checkpoint':
+    default:
+      return 'info';
+  }
+}
+
 export function formatNumber(num: number): string {
   return num.toLocaleString();
 }

@@ -1,2 +1,13 @@
-export { DashboardIcon, SitesIcon, SettingsIcon, AddIcon, MarkIcon } from './icons';
+export {
+  DashboardIcon,
+  SitesIcon,
+  SettingsIcon,
+  AddIcon,
+  LockIcon,
+  CheckpointIcon,
+  DelayIcon,
+  HardBlockIcon,
+  BackIcon,
+  MarkIcon,
+} from './icons';
 export type { IconProps } from './icons';

@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Constraint } from '../../../../shared/types/constraint';
 import { BehaviorBadge } from '../BehaviorBadge';
+import { LockIcon } from '../../icons';
 import styles from './ConstraintCard.module.css';
 
 export interface ConstraintCardProps {
@@ -10,10 +11,18 @@ export interface ConstraintCardProps {
 }
 
 export const ConstraintCard: React.FC<ConstraintCardProps> = ({ constraint, onEdit, onDelete }) => {
+  // A private constraint's real domain must never reach visible text,
+  // title attributes, or accessibility labels — derive one masked value
+  // and use it everywhere the domain would otherwise appear.
+  const displayDomain = constraint.isPrivate ? 'Private site' : constraint.domain;
+
   return (
     <div className={styles.card}>
       <div className={styles.header}>
-        <span className={styles.domain}>{constraint.domain}</span>
+        <span className={`${styles.domain} ${constraint.isPrivate ? styles.domainPrivate : ''}`}>
+          {constraint.isPrivate && <LockIcon className={styles.lockIcon} />}
+          {displayDomain}
+        </span>
         <BehaviorBadge behavior={constraint.behavior} />
       </div>
       <div className={styles.actions}>
@@ -21,7 +30,8 @@ export const ConstraintCard: React.FC<ConstraintCardProps> = ({ constraint, onEd
           className={styles.actionButton}
           onClick={() => onEdit(constraint)}
           type="button"
-          aria-label={`Edit ${constraint.domain}`}
+          aria-label={`Edit ${displayDomain}`}
+          data-edit-id={constraint.id}
         >
           Edit
         </button>
@@ -29,7 +39,7 @@ export const ConstraintCard: React.FC<ConstraintCardProps> = ({ constraint, onEd
           className={`${styles.actionButton} ${styles.deleteButton}`}
           onClick={() => onDelete(constraint)}
           type="button"
-          aria-label={`Delete ${constraint.domain}`}
+          aria-label={`Delete ${displayDomain}`}
         >
           Delete
         </button>

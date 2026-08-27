@@ -32,7 +32,6 @@
       document.querySelectorAll('#ac-behaviors .behavior-row').forEach(function (el) {
         el.classList.toggle('is-selected', el.dataset.behavior === behavior);
       });
-      document.getElementById('ac-reason-field').style.display = behavior === 'hardblock' ? 'none' : 'block';
     },
 
     stepDelay: function (delta) {
@@ -42,6 +41,15 @@
 
     togglePrivate: function (checked) {
       document.getElementById('ac-private-warning').style.display = checked ? 'block' : 'none';
+    },
+
+    // Reason stays collapsed behind "+ Add a reason" until asked for
+    // (§11, §21) — mirrors the same reveal behavior as production.
+    revealReason: function () {
+      document.getElementById('ac-reason-action').style.display = 'none';
+      var field = document.getElementById('ac-reason-field');
+      field.style.display = 'block';
+      document.getElementById('ac-reason').focus();
     }
   };
 

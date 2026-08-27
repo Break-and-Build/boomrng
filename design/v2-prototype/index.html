@@ -31,6 +31,7 @@
     <symbol id="i-import" viewBox="0 0 20 20"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v8.4"/><path d="M6.6 9L10 12.4 13.4 9"/><path d="M4.2 13.4v1.9A1.4 1.4 0 0 0 5.6 16.7h8.8a1.4 1.4 0 0 0 1.4-1.4v-1.9"/></g></symbol>
     <symbol id="i-lock-mini" viewBox="0 0 20 20"><g fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5.5" y="9" width="9" height="6.5" rx="1.3"/><path d="M7.3 9V6.8a2.7 2.7 0 0 1 5.4 0V9"/></g></symbol>
     <symbol id="i-close" viewBox="0 0 20 20"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="5.5" y1="5.5" x2="14.5" y2="14.5"/><line x1="14.5" y1="5.5" x2="5.5" y2="14.5"/></g></symbol>
+    <symbol id="i-back" viewBox="0 0 20 20"><path d="M12.5 5L7.5 10L12.5 15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   </defs>
 </svg>
 
@@ -284,22 +285,18 @@
     <section class="screen" data-screen="add-constraint">
       <div class="screen-head">
         <div class="eyebrow">Popup · Screen 4 — interactive</div>
-        <h1>Add Constraint — revised</h1>
-        <p>Compact accordion instead of four large cards: only the selected behavior expands to show its description and configuration. No footer Cancel — the panel's own header carries a <code>×</code> close instead, and the primary action is compact, text-labeled, and alone.</p>
+        <h1>Add Constraint — dedicated screen</h1>
+        <p>Not a modal — the persistent header and bottom navigation are replaced by a single-purpose focused screen (back arrow + title) for the duration of this flow, using the popup's full body instead of a capped, centered card. Compact accordion behavior picker: only the selected behavior expands to show its description and configuration. The optional reason field stays collapsed behind a quiet "+ Add a reason" action until asked for.</p>
       </div>
       <div class="stage">
         <div class="popup-device">
           <div class="chrome-bar"><div class="dots"><span></span><span></span><span></span></div><div class="ext-icon"><svg><use href="#i-mark-a"/></svg></div></div>
           <div class="popup-shell">
-            <div class="popup-header">
-              <svg class="mark"><use href="#i-mark-a"/></svg>
-              <span class="wordmark">boomrng</span>
+            <div class="focused-header">
+              <button class="icon-btn" aria-label="Back to Sites" title="Back to Sites" onclick="Proto.go('sites')"><svg><use href="#i-back"/></svg></button>
+              <span class="focused-title">Add constraint</span>
             </div>
             <div class="popup-body" id="ac-root">
-              <div class="panel-header">
-                <span class="panel-title">Add constraint</span>
-                <button class="icon-btn" aria-label="Close" title="Close" onclick="Proto.go('sites')"><svg><use href="#i-close"/></svg></button>
-              </div>
               <div class="field">
                 <label for="ac-domain">Domain</label>
                 <input class="input mono" id="ac-domain" type="text" value="youtube.com" placeholder="twitter.com">
@@ -375,9 +372,12 @@
                 </div>
               </div>
 
-              <div class="field" id="ac-reason-field">
+              <div class="add-reason-action" id="ac-reason-action">
+                <button type="button" onclick="Proto.ac.revealReason()">+ Add a reason</button>
+              </div>
+              <div class="field" id="ac-reason-field" style="display:none;">
                 <label for="ac-reason">Remind yourself why <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
-                <input class="input" id="ac-reason" type="text" value="I said I'd write, not scroll.">
+                <input class="input" id="ac-reason" type="text" placeholder="I said I'd write, not scroll.">
               </div>
 
               <div class="form-actions">
