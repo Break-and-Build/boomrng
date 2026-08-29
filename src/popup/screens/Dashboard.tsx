@@ -2,7 +2,7 @@ import React from 'react';
 import { useConstraints } from '../hooks/useConstraints';
 import { useSettings } from '../hooks/useSettings';
 import { useTabCount } from '../hooks/useTabCount';
-import { toV2BehaviorLabel, toV2BehaviorBadgeVariant, formatBehaviorConfig } from '../../shared/utils';
+import { toV2BehaviorLabel, toV2BehaviorBadgeVariant, formatBehaviorConfig, pluralize } from '../../shared/utils';
 import { Badge } from '../components/foundation/Badge';
 import { Button } from '../components/foundation/Button';
 import { Card } from '../components/foundation/Card';
@@ -15,10 +15,6 @@ const MAX_ROWS = 3;
 
 export interface DashboardProps {
   onNavigate: (screen: 'sites' | 'settings') => void;
-}
-
-function pluralize(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {

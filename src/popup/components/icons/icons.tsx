@@ -131,6 +131,27 @@ export function DeleteIcon(props: IconProps): React.ReactElement {
   );
 }
 
+/** Open eye — "show" state for a masked PIN field (§20 addendum). */
+export function EyeIcon(props: IconProps): React.ReactElement {
+  return (
+    <UiIcon {...props}>
+      <path d="M2.5 10S5.5 4.8 10 4.8 17.5 10 17.5 10 14.5 15.2 10 15.2 2.5 10 2.5 10Z" />
+      <circle cx="10" cy="10" r="2.4" />
+    </UiIcon>
+  );
+}
+
+/** Open eye with a slash — "hide" state for a revealed PIN field (§20 addendum). */
+export function EyeOffIcon(props: IconProps): React.ReactElement {
+  return (
+    <UiIcon {...props}>
+      <path d="M2.5 10S5.5 4.8 10 4.8c1.1 0 2.1.22 3 .58M17.5 10S15.9 12.8 13 14.2M6.1 6.1C4 7.4 2.5 10 2.5 10" />
+      <path d="M8.3 11.7a2.4 2.4 0 0 0 3.4-3.4" />
+      <line x1="3.5" y1="16.5" x2="16.5" y2="3.5" />
+    </UiIcon>
+  );
+}
+
 /**
  * The Boomrng product mark — Concept A, "Smooth Arc" (§4). Locked as the
  * V2 direction; first pass only, not final artwork.

@@ -18,16 +18,30 @@
   gap: 8px;
 }
 
-.pinInput {
+.pinInputWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
   flex: 1;
+}
+
+.pinInput {
+  width: 100%;
   height: 30px;
-  padding: 0 10px;
+  padding: 0 32px 0 10px;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: var(--text-body-secondary);
   font-family: var(--font-mono);
+}
+
+.revealToggle {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  transform: translateY(-50%);
 }
 
 .pinInput:focus {
@@ -53,6 +67,27 @@
 }
 
 .ghostAction:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.destructiveAction {
+  background: none;
+  border: none;
+  color: var(--destructive);
+  font-size: var(--text-body-secondary);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.destructiveAction:hover {
+  background: rgba(224, 85, 90, 0.1);
+}
+
+.destructiveAction:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -83,4 +118,25 @@
   margin: 8px 0 0;
   color: var(--destructive);
   font-size: var(--text-label);
+}
+
+.forgotPinLink {
+  display: block;
+  margin: 8px 0 0;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: var(--text-label);
+  cursor: pointer;
+}
+
+.forgotPinLink:hover {
+  color: var(--text-secondary);
+  text-decoration: underline;
+}
+
+.forgotPinLink:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

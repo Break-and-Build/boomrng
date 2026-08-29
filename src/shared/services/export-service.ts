@@ -2,6 +2,7 @@ import type { Settings } from '../types/settings';
 import type { Constraint } from '../types/constraint';
 import { loadSettings, loadConstraints, saveSettings, saveConstraints } from '../storage/storage-service';
 import { validateConstraint } from './validation-service';
+import { isPinProtected } from './pin-recovery-service';
 
 export interface ExportData {
   version: string;
@@ -10,18 +11,36 @@ export interface ExportData {
   constraints: Constraint[];
 }
 
-export async function exportData(): Promise<ExportData> {
+export interface ImportResult {
+  success: boolean;
+  errors: string[];
+  /** Number of imported constraints that need a PIN to be usable (PIN-Required or private) and don't have one after the merge — 0 when nothing needs attention. */
+  pinDependentCount?: number;
+}
+
+/**
+ * The PIN is never included, in either mode — see
+ * BOOMRNG-V2-DESIGN-SPEC.md §26. Exporting it would mean the one secret
+ * every PIN-dependent protection relies on travels inside the exact
+ * plaintext file this feature already admits it can't secure.
+ */
+export async function exportData(includePrivate: boolean = false): Promise<ExportData> {
   const settings = await loadSettings();
   const constraints = await loadConstraints();
+  const exportedConstraints = includePrivate ? constraints : constraints.filter((c) => !c.isPrivate);
   return {
     version: '1.0.0',
     exportedAt: Date.now(),
-    settings,
-    constraints,
+    settings: { ...settings, pin: null },
+    constraints: exportedConstraints,
   };
 }
 
-export async function importData(data: ExportData): Promise<{ success: boolean; errors: string[] }> {
+function countPinDependent(constraints: Constraint[]): number {
+  return constraints.filter(isPinProtected).length;
+}
+
+export async function importData(data: ExportData): Promise<ImportResult> {
   const errors: string[] = [];
 
   if (!data.version) {
@@ -40,18 +59,20 @@ export async function importData(data: ExportData): Promise<{ success: boolean; 
     return { success: false, errors };
   }
 
-  // Validate against the PIN the import itself would leave in place, not
-  // whatever's currently stored — an export/import round trip that
-  // carries both a PIN and pin-required constraints together is valid.
-  const pinConfigured = Boolean(data.settings?.pin);
-
+  // Import is a restore operation, not constraint creation — a PIN-Required
+  // constraint being present in the backup is expected and must not fail
+  // the import merely because this device has no PIN configured right now.
+  // Exports never carry a PIN (see exportData above), so requiring one
+  // here would make PIN-dependent constraints permanently non-portable.
+  // The caller checks pinDependentCount below and prompts to set a PIN
+  // if the restored data actually needs one.
   for (const constraint of data.constraints) {
     const validation = validateConstraint(
       constraint.domain,
       constraint.behavior,
       constraint.delayMinutes ?? undefined,
       constraint.customMessage ?? undefined,
-      pinConfigured
+      true
     );
     if (!validation.isValid) {
       errors.push(`Invalid constraint for ${constraint.domain}: ${validation.errors.map((e) => e.message).join(', ')}`);
@@ -62,7 +83,14 @@ export async function importData(data: ExportData): Promise<{ success: boolean; 
     return { success: false, errors };
   }
 
-  const settingsSaved = await saveSettings(data.settings);
+  // Never let an import overwrite the local PIN with the imported one —
+  // exports always carry `pin: null`, so a naive full overwrite would
+  // silently clear any PIN this device already has configured, undoing
+  // every protection §14 puts around clearing it deliberately.
+  const currentSettings = await loadSettings();
+  const settingsToSave: Settings = { ...data.settings, pin: currentSettings.pin };
+
+  const settingsSaved = await saveSettings(settingsToSave);
   const constraintsSaved = await saveConstraints(data.constraints);
 
   if (!settingsSaved || !constraintsSaved) {
@@ -70,7 +98,9 @@ export async function importData(data: ExportData): Promise<{ success: boolean; 
     return { success: false, errors };
   }
 
-  return { success: true, errors: [] };
+  const pinDependentCount = settingsToSave.pin ? 0 : countPinDependent(data.constraints);
+
+  return { success: true, errors: [], pinDependentCount };
 }
 
 export function downloadExport(data: ExportData, filename?: string): void {

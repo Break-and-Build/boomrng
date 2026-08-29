@@ -10,6 +10,8 @@ export {
   BackIcon,
   EditIcon,
   DeleteIcon,
+  EyeIcon,
+  EyeOffIcon,
   MarkIcon,
 } from './icons';
 export type { IconProps } from './icons';

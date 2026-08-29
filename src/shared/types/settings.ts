@@ -5,7 +5,6 @@ export interface Settings {
   tabBudget: number;
   landingPage: string;
   allowedSites: string[];
-  strictMode: boolean;
   schemaVersion: number;
 }
 
@@ -16,6 +15,5 @@ export const DEFAULT_SETTINGS: Settings = {
   tabBudget: 10,
   landingPage: '',
   allowedSites: ['localhost'],
-  strictMode: false,
   schemaVersion: 1,
 };

@@ -13,98 +13,212 @@
   margin-bottom: 24px;
 }
 
+.section:last-of-type {
+  margin-bottom: 0;
+}
+
 .sectionTitle {
-  margin: 0 0 12px 0;
+  margin: 0 0 8px 0;
   font-size: var(--text-heading);
   font-weight: 500;
   color: var(--text-secondary);
 }
 
-.toggle {
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.compactPinFields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 140px;
+}
+
+.hint {
+  font-size: var(--text-body-secondary);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+.warning {
+  font-size: var(--text-body-secondary);
+  color: var(--warning);
+  background: rgba(227, 165, 61, 0.1);
+  border: 1px solid rgba(227, 165, 61, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  line-height: 1.5;
+  margin: 0 0 8px;
+}
+
+.statusRow {
+  margin-bottom: 6px;
+}
+
+.statusOn {
+  color: var(--accent);
+  font-size: var(--text-body-secondary);
+  font-weight: 500;
+}
+
+.pinDots {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.pinDots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+.buttonRow {
+  display: flex;
+  gap: 8px;
+}
+
+.buttonRowEnd {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.destructiveSecondary {
+  color: var(--destructive);
+}
+
+.stepperRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border);
+  gap: 10px;
+  margin-bottom: var(--space-2);
+}
+
+.stepperButton {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-subtle);
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1;
   cursor: pointer;
 }
 
-.toggleLabel {
-  color: var(--text-primary);
+.stepperButton:hover {
+  border-color: var(--border-strong);
 }
 
-.field {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 0;
+.stepperButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
-.fieldLabel {
-  color: var(--text-primary);
-}
-
-.fieldHint {
+.stepperValue {
+  font-family: var(--font-mono);
   font-size: var(--text-body-secondary);
-  color: var(--text-secondary);
-}
-
-.numberInput {
-  width: 64px;
-  padding: 8px;
-  background: var(--surface-subtle);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
+  font-weight: 500;
+  min-width: 72px;
   text-align: center;
-}
-
-.numberInput:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--focus-ring);
-}
-
-.pinGroup {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.pinInput {
-  flex: 1;
-  padding: 10px 12px;
-  background: var(--surface-subtle);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: var(--text-body);
-}
-
-.pinInput:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--focus-ring);
-}
-
-.clearPinBtn {
-  margin-top: 8px;
-}
-
-.errorText {
-  display: block;
-  color: var(--destructive);
-  font-size: var(--text-body-secondary);
-  margin-top: 4px;
+  display: inline-block;
 }
 
 .buttonGroup {
   display: flex;
   gap: 8px;
+  margin-bottom: 8px;
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-body-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  margin-bottom: 8px;
 }
 
 .hiddenInput {
   display: none;
+}
+
+.forgotPinLink {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: var(--text-label);
+  cursor: pointer;
+}
+
+.forgotPinLink:hover {
+  color: var(--text-secondary);
+  text-decoration: underline;
+}
+
+.forgotPinLink:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.linkAction {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: var(--text-body-secondary);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.linkAction:hover {
+  color: var(--accent-hover);
+}
+
+.linkAction:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.modalIntro {
+  margin: 0 0 14px;
+  font-size: var(--text-body-secondary);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.behaviorList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.behaviorItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.behaviorName {
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.behaviorDesc {
+  margin: 0;
+  font-size: var(--text-body-secondary);
+  color: var(--text-secondary);
+  line-height: 1.5;
 }
 
 .loading {

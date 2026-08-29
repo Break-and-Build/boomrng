@@ -11,6 +11,9 @@ import { ConfirmationDialog } from '../components/feedback/ConfirmationDialog';
 import { ConstraintCard } from '../components/constraints/ConstraintCard';
 import { RevealBar, type RevealBarState } from '../components/constraints/RevealBar';
 import { PinEntryForm } from '../components/constraints/PinEntryForm';
+import { ForgotPinDialog } from '../components/constraints/ForgotPinDialog';
+import { resetPinAndDeleteProtectedConstraints } from '../../shared/services/pin-recovery-service';
+import { pluralize } from '../../shared/utils';
 import { AddIcon } from '../components/icons';
 import type { SitesFocusHint } from '../App';
 import styles from './Sites.module.css';
@@ -56,6 +59,12 @@ export const Sites: React.FC<SitesProps> = ({
   const [deleteVerifyTarget, setDeleteVerifyTarget] = useState<Constraint | null>(null);
   const [deleteVerifyPinInput, setDeleteVerifyPinInput] = useState('');
   const [deleteVerifyPinError, setDeleteVerifyPinError] = useState<string | null>(null);
+
+  // Forgot-PIN recovery — its own state machine, separate from unlock and
+  // delete authorization above. It never checks the PIN and never unlocks
+  // or reveals private constraints; a confirmed reset only clears the PIN
+  // and deletes protected constraints (BOOMRNG-V2-DESIGN-SPEC.md §14/§26).
+  const [forgotPinOpen, setForgotPinOpen] = useState(false);
 
   const pinConfigured = Boolean(settings.pin);
 
@@ -202,6 +211,34 @@ export const Sites: React.FC<SitesProps> = ({
     );
   }, [constraints, setConstraints, deletingConstraint, showToast]);
 
+  const handleOpenForgotPin = useCallback(() => {
+    setForgotPinOpen(true);
+  }, []);
+
+  const handleCancelForgotPin = useCallback(() => {
+    setForgotPinOpen(false);
+  }, []);
+
+  // Recovery, not verification: never checks the PIN and never unlocks or
+  // reveals private constraints — it deletes them along with the PIN
+  // itself, so whatever pending unlock/edit/delete attempt was in progress
+  // is abandoned rather than authorized. See pin-recovery-service.ts.
+  const handleConfirmForgotPin = useCallback(async () => {
+    const { deletedCount } = await resetPinAndDeleteProtectedConstraints();
+    setForgotPinOpen(false);
+    setPinPromptOpen(false);
+    setPendingEditConstraint(null);
+    setPinInput('');
+    setPinError(null);
+    setDeleteVerifyTarget(null);
+    setDeleteVerifyPinInput('');
+    setDeleteVerifyPinError(null);
+    showToast(
+      deletedCount > 0 ? `PIN reset. ${pluralize(deletedCount, 'constraint')} removed.` : 'PIN reset.',
+      'success'
+    );
+  }, [showToast]);
+
   if (isLoading) {
     return (
       <div className={styles.loading}>
@@ -257,6 +294,7 @@ export const Sites: React.FC<SitesProps> = ({
                 onPinInputChange={setDeleteVerifyPinInput}
                 onSubmit={handleSubmitDeleteVerifyPin}
                 onCancel={handleCancelDeleteVerify}
+                onForgotPin={handleOpenForgotPin}
                 submitLabel="Verify"
                 ariaLabel="Enter PIN to delete this private constraint"
                 helperText="Enter your PIN to delete this constraint."
@@ -271,6 +309,7 @@ export const Sites: React.FC<SitesProps> = ({
                 onRequestUnlock={handleRequestUnlock}
                 onLock={handleLock}
                 onNavigateToSettings={onNavigateToSettings}
+                onForgotPin={handleOpenForgotPin}
               />
             ))}
 
@@ -299,6 +338,8 @@ export const Sites: React.FC<SitesProps> = ({
         message={`Are you sure you want to delete ${deletingLabel}?`}
         confirmLabel="Delete"
       />
+
+      <ForgotPinDialog isOpen={forgotPinOpen} onClose={handleCancelForgotPin} onConfirm={handleConfirmForgotPin} />
     </div>
   );
 };

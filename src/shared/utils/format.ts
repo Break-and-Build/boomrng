@@ -74,6 +74,10 @@ export function formatBehaviorConfig(behavior: ConstraintBehavior, delayMinutes:
   return null;
 }
 
+export function pluralize(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
 export function formatNumber(num: number): string {
   return num.toLocaleString();
 }

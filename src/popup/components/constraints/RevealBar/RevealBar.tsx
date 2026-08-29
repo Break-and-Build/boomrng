@@ -14,6 +14,7 @@ export interface RevealBarProps {
   onRequestUnlock: () => void;
   onLock: () => void;
   onNavigateToSettings: () => void;
+  onForgotPin: () => void;
 }
 
 /**
@@ -33,6 +34,7 @@ export const RevealBar: React.FC<RevealBarProps> = ({
   onRequestUnlock,
   onLock,
   onNavigateToSettings,
+  onForgotPin,
 }) => {
   if (state === 'pin-entry') {
     return (
@@ -41,6 +43,7 @@ export const RevealBar: React.FC<RevealBarProps> = ({
         pinError={pinError}
         onPinInputChange={onPinInputChange}
         onSubmit={onSubmitPin}
+        onForgotPin={onForgotPin}
         submitLabel="Unlock"
         ariaLabel="Enter PIN to unlock private constraints"
       />
