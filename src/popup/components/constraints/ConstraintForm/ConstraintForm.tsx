@@ -107,7 +107,13 @@ export const ConstraintForm: React.FC<ConstraintFormProps> = ({
 
     if (!normalizedDomain) {
       domainError.domain = 'Enter a valid domain (e.g., twitter.com)';
-    } else if (existingDomains.includes(normalizedDomain)) {
+    } else if (existingDomains.some((d) => normalizeDomain(d) === normalizedDomain)) {
+      // Re-normalizing each existing domain here (rather than comparing
+      // against the raw stored strings directly) is what makes this guard
+      // also catch a collision against legacy or imported data that
+      // predates consistent domain normalization (BOOMRNG-V2-DESIGN-SPEC.md
+      // §30.2) — a stored "WWW.Example.com" must still be recognized as
+      // the same effective domain as a freshly-typed "example.com".
       domainError.domain = 'This domain already has a constraint';
     }
 

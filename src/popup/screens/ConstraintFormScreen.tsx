@@ -53,8 +53,6 @@ export const ConstraintFormScreen: React.FC<ConstraintFormScreenProps> = ({
         schedule: null,
         customMessage: data.customMessage,
         createdAt: Date.now(),
-        enforcedToday: 0,
-        lastEnforcedAt: null,
         progressiveDelay: null,
         isPrivate: data.isPrivate,
       };

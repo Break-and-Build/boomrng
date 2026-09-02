@@ -7,16 +7,23 @@
   <link rel="stylesheet" href="../shared/enforcement.css">
 </head>
 <body>
-  <div class="enforcement-page">
-    <div class="enforcement-icon checkpoint">◉</div>
-    <h1 class="enforcement-title">Checkpoint</h1>
-    <p class="enforcement-message">Take a moment to consider. Is this intentional?</p>
-    <div class="enforcement-domain" id="domain"></div>
-    <div class="enforcement-actions">
-      <button class="btn btn-primary" id="continue">Continue to site</button>
-      <button class="btn btn-secondary" id="goBack">Go back</button>
+  <main class="enf" id="page" hidden>
+    <svg class="glyph" viewBox="0 0 20 20" aria-hidden="true">
+      <path d="M14.7 6.2A6 6 0 1 1 6 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="14.8" cy="6.1" r="1" fill="currentColor" stroke="none"/>
+    </svg>
+    <div class="domain-chip" id="domain" hidden></div>
+    <h1 id="headline"></h1>
+    <p class="sub">Is that what you meant to do?</p>
+    <blockquote class="reason" id="reason" hidden>
+      <b>You told yourself</b><span id="reasonText"></span>
+    </blockquote>
+    <div class="enf-actions">
+      <button type="button" class="btn btn-primary" id="goBack">Back to what I was doing</button>
+      <button type="button" class="link-btn" id="continue"></button>
+      <p class="error-text" id="error" role="alert" aria-live="assertive"></p>
     </div>
-  </div>
+  </main>
   <div class="brand">boomrng</div>
   <script type="module" src="./checkpoint.ts"></script>
 </body>

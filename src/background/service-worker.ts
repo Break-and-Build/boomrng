@@ -1,6 +1,16 @@
 import { generateRules } from './rules-builder';
 import { loadSettings, loadConstraints } from '../shared/storage/storage-service';
 import type { Constraint } from '../shared/types';
+import { shouldExcludeTabFromBudget } from '../shared/utils/tabs';
+import { verifyPin } from '../shared/services/pin-service';
+import {
+  grantContinuation,
+  handleNavigationComplete,
+  handleTabRemoved,
+  handleContinuationAlarm,
+  isContinuationAlarm,
+  tabIdFromContinuationAlarm,
+} from './continuation-service';
 
 let ruleRefreshInFlight: Promise<void> | null = null;
 let ruleRefreshQueued = false;
@@ -61,7 +71,7 @@ async function scheduleNextTimerRefresh(constraints: Constraint[]): Promise<void
 async function updateBadge(): Promise<void> {
   const settings = await loadSettings();
   const tabs = await chrome.tabs.query({ currentWindow: true });
-  const count = tabs.length;
+  const count = tabs.filter((tab) => !shouldExcludeTabFromBudget(tab)).length;
   const max = settings.tabBudget;
 
   chrome.action.setBadgeText({ text: count.toString() });
@@ -85,7 +95,8 @@ async function enforceTabLimit(tab: chrome.tabs.Tab, attemptedUrl?: string): Pro
   if (maxTabs <= 0) return;
 
   const tabs = await chrome.tabs.query({ currentWindow: true });
-  if (tabs.length <= maxTabs) return;
+  const countedTabs = tabs.filter((t) => !shouldExcludeTabFromBudget(t)).length;
+  if (countedTabs <= maxTabs) return;
 
   if (isEnforcementPageUrl(tab.url) || isEnforcementPageUrl(attemptedUrl)) return;
 
@@ -143,18 +154,26 @@ async function refreshEnforcementRules(): Promise<void> {
   }
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'VALIDATE_PIN') {
     loadSettings().then((settings) => {
-      const isValid = settings.pin === message.pin;
+      const isValid = verifyPin(message.pin, settings.pin);
       sendResponse({ success: true, data: { valid: isValid } });
     });
     return true;
   }
 
   if (message.type === 'REQUEST_CONTINUE') {
-    sendResponse({ success: true });
-    return false;
+    // The tab is read from `sender`, never trusted from the message body
+    // — a page can only ever request continuation for the tab it's
+    // actually running in, not an arbitrary tabId it might claim.
+    const tabId = sender.tab?.id;
+    if (tabId === undefined) {
+      sendResponse({ success: false, error: 'No tab context for this request' });
+      return false;
+    }
+    grantContinuation({ domain: message.domain, tabId }).then(sendResponse);
+    return true;
   }
 });
 
@@ -176,23 +195,55 @@ chrome.tabs.onCreated.addListener(async (tab) => {
   await enforceTabLimit(tab, pendingUrl);
 });
 
-chrome.tabs.onUpdated.addListener(async (_tabId, changeInfo, tab) => {
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  // Each concern is isolated with its own .catch() — matching every other
+  // listener in this file — so a failure in one can never silently
+  // prevent the other from running for this event. Previously both were
+  // awaited sequentially inside one async function with no isolation: an
+  // enforceTabLimit() rejection would have skipped handleNavigationComplete()
+  // entirely for that event, on top of leaving an unhandled rejection.
   if (changeInfo.url) {
-    await enforceTabLimit(tab, changeInfo.url);
+    enforceTabLimit(tab, changeInfo.url).catch((error) => {
+      console.error('[boomrng] Failed to enforce tab limit:', error);
+    });
+  }
+  // Primary continuation cleanup signal. Deliberately gated on the whole
+  // navigation reaching 'complete' — not the first onUpdated event after
+  // a grant, which can fire mid-redirect-chain — so a same-domain server
+  // redirect (facebook.com -> web.facebook.com) always gets the chance to
+  // finish under the grant before it's revoked (see continuation-service.ts).
+  if (changeInfo.status === 'complete') {
+    handleNavigationComplete(tabId).catch((error) => {
+      console.error('[boomrng] Failed to clean up continuation on navigation complete:', error);
+    });
   }
 });
 
-chrome.tabs.onRemoved.addListener(() => {
+chrome.tabs.onRemoved.addListener((tabId) => {
+  handleTabRemoved(tabId).catch((error) => {
+    console.error('[boomrng] Failed to clean up continuation on tab close:', error);
+  });
   updateBadge().catch((error) => {
     console.error('[boomrng] Failed to update badge after tab close:', error);
   });
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name !== RULE_TIMER_ALARM) return;
-  refreshEnforcementRules().catch((error) => {
-    console.error('[boomrng] Failed to refresh rules on timer transition:', error);
-  });
+  if (alarm.name === RULE_TIMER_ALARM) {
+    refreshEnforcementRules().catch((error) => {
+      console.error('[boomrng] Failed to refresh rules on timer transition:', error);
+    });
+    return;
+  }
+
+  if (isContinuationAlarm(alarm.name)) {
+    const tabId = tabIdFromContinuationAlarm(alarm.name);
+    if (tabId !== null) {
+      handleContinuationAlarm(tabId).catch((error) => {
+        console.error('[boomrng] Failed to revoke continuation (alarm backstop):', error);
+      });
+    }
+  }
 });
 
 function syncStateOnBoot(): void {

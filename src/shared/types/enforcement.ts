@@ -1,16 +1,3 @@
-export interface EnforcementRecord {
-  date: string;
-  enforcedCounts: Record<string, number>;
-  overridesUsed: number;
-  lastEnforcedAt: number | null;
-}
-
-export interface OverrideSession {
-  domain: string;
-  usedAt: number;
-  pinRequired: boolean;
-}
-
 export type EnforcementAction =
   | { type: 'allow' }
   | { type: 'checkpoint'; domain: string }

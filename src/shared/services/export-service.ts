@@ -3,6 +3,7 @@ import type { Constraint } from '../types/constraint';
 import { loadSettings, loadConstraints, saveSettings, saveConstraints } from '../storage/storage-service';
 import { validateConstraint } from './validation-service';
 import { isPinProtected } from './pin-recovery-service';
+import { normalizeDomain } from '../utils/domain';
 
 export interface ExportData {
   version: string;
@@ -77,6 +78,38 @@ export async function importData(data: ExportData): Promise<ImportResult> {
     if (!validation.isValid) {
       errors.push(`Invalid constraint for ${constraint.domain}: ${validation.errors.map((e) => e.message).join(', ')}`);
     }
+  }
+
+  if (errors.length > 0) {
+    return { success: false, errors };
+  }
+
+  // One effective domain must map to exactly one constraint
+  // (BOOMRNG-V2-DESIGN-SPEC.md §30.2), extended to imported data: an
+  // import must not silently create two constraints for the same
+  // effective domain. This only checks *within* the imported file —
+  // `saveConstraints(data.constraints)` below is a full replace, not a
+  // merge (a restore genuinely replaces the device's constraint list with
+  // the backup's), so whatever domains happen to already be stored before
+  // this import runs are about to be discarded regardless and are not a
+  // real collision candidate; checking the import file against them would
+  // incorrectly reject an entirely ordinary re-import of a device's own
+  // recent backup. Rejection reuses the same all-or-nothing convention
+  // this function already applies to any other invalid constraint above,
+  // rather than silently dropping or merging whichever constraint
+  // "loses" — no such precedence is defined, and inventing one here isn't
+  // this milestone's decision to make.
+  const seenImportedDomains = new Set<string>();
+  const reportedDomains = new Set<string>();
+  for (const constraint of data.constraints) {
+    const normalized = normalizeDomain(constraint.domain);
+    if (!normalized || reportedDomains.has(normalized)) continue;
+
+    if (seenImportedDomains.has(normalized)) {
+      errors.push(`Duplicate effective domain in import file: ${normalized}`);
+      reportedDomains.add(normalized);
+    }
+    seenImportedDomains.add(normalized);
   }
 
   if (errors.length > 0) {

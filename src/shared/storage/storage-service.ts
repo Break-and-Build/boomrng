@@ -1,13 +1,11 @@
 import type { Settings } from '../types/settings';
 import { DEFAULT_SETTINGS } from '../types/settings';
 import type { Constraint } from '../types/constraint';
-import type { EnforcementRecord, OverrideSession } from '../types/enforcement';
+import { normalizeDomain } from '../utils/domain';
 
 export const STORAGE_KEYS = {
   SETTINGS: 'settings',
   CONSTRAINTS: 'constraints',
-  ENFORCEMENT_RECORDS: 'enforcementRecords',
-  OVERRIDE_SESSIONS: 'overrideSessions',
   SCHEMA_VERSION: 'schemaVersion',
 } as const;
 
@@ -39,7 +37,21 @@ export async function loadConstraints(): Promise<Constraint[]> {
   // Backwards compatibility: constraints saved before `isPrivate` existed
   // won't have the field. Normalize once here rather than defaulting it
   // everywhere the field is read.
-  return constraints.map((c) => ({ ...c, isPrivate: c.isPrivate ?? false }));
+  //
+  // Domain is also normalized on load (BOOMRNG-V2-DESIGN-SPEC.md §30.2) so
+  // a constraint saved before the canonical `normalizeDomain()` identity
+  // was consistently applied everywhere (or written by an older version,
+  // or restored from an import) compares correctly against everything
+  // else that now uses that same identity — the duplicate-domain guard,
+  // DNR rule generation, and the enforcement page's live constraint
+  // lookup. This never merges or drops a constraint, only canonicalizes
+  // its stored domain string; a domain that fails to normalize is left
+  // exactly as stored rather than discarding data.
+  return constraints.map((c) => ({
+    ...c,
+    domain: normalizeDomain(c.domain) ?? c.domain,
+    isPrivate: c.isPrivate ?? false,
+  }));
 }
 
 export async function saveConstraints(constraints: Constraint[]): Promise<boolean> {
@@ -48,26 +60,6 @@ export async function saveConstraints(constraints: Constraint[]): Promise<boolea
     return true;
   } catch (error) {
     console.error('[boomrng] Failed to save constraints:', error);
-    return false;
-  }
-}
-
-export async function loadEnforcementRecords(): Promise<Record<string, EnforcementRecord>> {
-  const data = await chrome.storage.local.get(STORAGE_KEYS.ENFORCEMENT_RECORDS);
-  return data[STORAGE_KEYS.ENFORCEMENT_RECORDS] || {};
-}
-
-export async function loadOverrideSessions(): Promise<OverrideSession[]> {
-  const data = await chrome.storage.local.get(STORAGE_KEYS.OVERRIDE_SESSIONS);
-  return data[STORAGE_KEYS.OVERRIDE_SESSIONS] || [];
-}
-
-export async function saveOverrideSessions(sessions: OverrideSession[]): Promise<boolean> {
-  try {
-    await chrome.storage.local.set({ [STORAGE_KEYS.OVERRIDE_SESSIONS]: sessions });
-    return true;
-  } catch (error) {
-    console.error('[boomrng] Failed to save override sessions:', error);
     return false;
   }
 }

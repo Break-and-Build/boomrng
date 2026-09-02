@@ -40,11 +40,6 @@ body {
   color: var(--accent);
 }
 
-.enforcement-icon.delay {
-  background: rgba(245, 166, 35, 0.15);
-  color: var(--warning);
-}
-
 .enforcement-icon.block {
   background: rgba(224, 85, 90, 0.15);
   color: var(--destructive);
@@ -169,30 +164,6 @@ body {
   border-color: var(--destructive);
 }
 
-.countdown {
-  font-family: var(--font-mono);
-  font-size: 48px;
-  font-weight: 700;
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
-  margin-bottom: 24px;
-}
-
-.progress-bar {
-  width: 100%;
-  height: 4px;
-  background: var(--surface-subtle);
-  border-radius: 2px;
-  overflow: hidden;
-  margin-bottom: 24px;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--accent);
-  transition: width 1s linear;
-}
-
 .error-text {
   color: var(--destructive);
   font-size: var(--text-body-secondary);
@@ -207,4 +178,182 @@ body {
   font-size: var(--text-meta);
   color: var(--text-secondary);
   opacity: 0.5;
+}
+
+/*
+ * ---------- Checkpoint/Delay (V2 redesign, BOOMRNG-V2-DESIGN-SPEC.md §§12-13) ----------
+ * A page-scoped composition, deliberately separate from `.enforcement-page`
+ * above rather than a rewrite of it — PIN/Hard Block/Tab Budget still use
+ * `.enforcement-page` unchanged until their own V2 milestones land. Every
+ * rule below is scoped under `.enf` (or a class, `.link-btn`, that doesn't
+ * exist outside this block) so none of it can affect those pages. Delay
+ * reuses this same block wholesale (domain chip, actions, primary/link
+ * buttons, error text) and adds only its own ring/readout rules at the end.
+ */
+
+.enf {
+  width: 100%;
+  max-width: 340px;
+  margin: 0 auto;
+  padding: 32px;
+  text-align: center;
+  color: var(--text-primary);
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+
+.enf.is-ready {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .enf {
+    transition: none;
+  }
+}
+
+/* Small-window resilience: Chrome allows enforcement pages to render in
+   oddly-sized popped-out windows, so padding compresses rather than
+   clipping or introducing horizontal scroll (§12). */
+@media (max-width: 340px) {
+  .enf {
+    padding: 20px;
+  }
+}
+
+.enf .glyph {
+  display: block;
+  width: 30px;
+  height: 30px;
+  color: var(--text-secondary);
+  margin: 0 auto 22px;
+}
+
+.enf .domain-chip {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  margin-bottom: 18px;
+}
+
+.enf h1 {
+  font-size: 19px;
+  line-height: 1.4;
+  font-weight: 600;
+  margin: 0 0 6px;
+  color: var(--text-primary);
+}
+
+.enf .sub {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+
+.enf .reason {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-style: italic;
+  border-left: 2px solid var(--border-strong);
+  padding-left: 12px;
+  text-align: left;
+  margin: 0 0 26px;
+  line-height: 1.55;
+}
+
+.enf .reason b {
+  font-style: normal;
+  color: var(--text-muted);
+  font-weight: 500;
+  display: block;
+  margin-bottom: 3px;
+  font-size: 11.5px;
+}
+
+.enf-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* The single dominant action on the page — full-width, filled, first in
+   tab order (§7's "40px for the single full-width primary action on
+   enforcement pages" rule). Scoped to `.enf` so the bare `.btn-primary`
+   used by other enforcement pages keeps its current auto-width sizing. */
+.enf .btn-primary {
+  width: 100%;
+  height: 40px;
+  padding: 10px 16px;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px;
+  margin-top: 14px;
+  border-radius: 6px;
+}
+
+.link-btn:hover {
+  color: var(--text-primary);
+}
+
+.link-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.link-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.enf .error-text {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+/*
+ * ---------- Delay (V2 redesign, BOOMRNG-V2-DESIGN-SPEC.md §13) ----------
+ * Delay-only additions on top of the shared `.enf` block above: the
+ * closing arc (the motif's most functional appearance, §3) and its
+ * numeric readout. Everything else on the page (domain chip, actions,
+ * primary/link buttons, error text) is the Checkpoint rules verbatim.
+ */
+
+.enf .ring {
+  display: block;
+  margin: 0 auto 18px;
+}
+
+.enf .ring circle {
+  transition: stroke-dashoffset 200ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .enf .ring circle {
+    transition: none;
+  }
+}
+
+.enf .readout {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  margin-bottom: 4px;
 }

@@ -1,17 +1,5 @@
 import { useState, useEffect } from 'react';
-
-function shouldExcludeTab(tab: chrome.tabs.Tab): boolean {
-  if (tab.url?.startsWith('chrome://')) return true;
-  if (tab.url?.startsWith('chrome-extension://')) return true;
-  if (tab.url?.startsWith('https://chromewebstore.google.com')) return true;
-  if (tab.url?.includes('checkpoint.html')) return true;
-  if (tab.url?.includes('delay.html')) return true;
-  if (tab.url?.includes('pin.html')) return true;
-  if (tab.url?.includes('hardblock.html')) return true;
-  if (tab.url?.includes('tabbudget.html')) return true;
-  if (tab.pinned) return true;
-  return false;
-}
+import { shouldExcludeTabFromBudget } from '../../shared/utils/tabs';
 
 export function useTabCount(): number {
   const [tabCount, setTabCount] = useState(0);
@@ -19,7 +7,7 @@ export function useTabCount(): number {
   useEffect(() => {
     async function fetchTabCount() {
       const tabs = await chrome.tabs.query({ currentWindow: true });
-      const count = tabs.filter((tab) => !shouldExcludeTab(tab)).length;
+      const count = tabs.filter((tab) => !shouldExcludeTabFromBudget(tab)).length;
       setTabCount(count);
     }
 

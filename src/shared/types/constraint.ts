@@ -16,8 +16,6 @@ export interface Constraint {
   schedule: ScheduleConfig | null;
   customMessage: string | null;
   createdAt: number;
-  enforcedToday: number;
-  lastEnforcedAt: number | null;
   progressiveDelay: ProgressiveDelayState | null;
   /**
    * Data-model groundwork for Private Constraints (BOOMRNG-V2-DESIGN-SPEC.md §26).
