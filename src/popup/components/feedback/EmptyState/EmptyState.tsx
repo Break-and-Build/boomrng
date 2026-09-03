@@ -2,7 +2,8 @@ import React from 'react';
 import styles from './EmptyState.module.css';
 
 export interface EmptyStateProps {
-  icon?: string;
+  /** A muted glyph shown above the title — e.g. one of the shared icon components (`../../icons`), not a raw emoji. Optional: neither current call site passed one before this. */
+  icon?: React.ReactNode;
   title: string;
   description?: string;
   action?: React.ReactNode;

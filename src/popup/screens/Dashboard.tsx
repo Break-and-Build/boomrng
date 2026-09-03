@@ -9,6 +9,7 @@ import { Card } from '../components/foundation/Card';
 import { Spinner } from '../components/foundation/Spinner';
 import { ProgressArc } from '../components/foundation/ProgressArc';
 import { EmptyState } from '../components/feedback/EmptyState';
+import { SitesIcon } from '../components/icons';
 import styles from './Dashboard.module.css';
 
 const MAX_ROWS = 3;
@@ -72,6 +73,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
       {constraints.length === 0 ? (
         <EmptyState
+          icon={<SitesIcon />}
           title="Nothing constrained yet."
           description="Add a site you want a pause before opening."
           action={
