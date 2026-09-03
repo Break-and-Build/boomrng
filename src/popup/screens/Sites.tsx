@@ -12,7 +12,8 @@ import { ConstraintCard } from '../components/constraints/ConstraintCard';
 import { RevealBar, type RevealBarState } from '../components/constraints/RevealBar';
 import { PinEntryForm } from '../components/constraints/PinEntryForm';
 import { ForgotPinDialog } from '../components/constraints/ForgotPinDialog';
-import { resetPinAndDeleteProtectedConstraints } from '../../shared/services/pin-recovery-service';
+import { resetPinAndDeleteProtectedConstraints, isPinProtected, authorizeConstraintMutation } from '../../shared/services/pin-recovery-service';
+import { verifyPin } from '../../shared/services/pin-service';
 import { pluralize } from '../../shared/utils';
 import { AddIcon } from '../components/icons';
 import type { SitesFocusHint } from '../App';
@@ -56,9 +57,25 @@ export const Sites: React.FC<SitesProps> = ({
   // fresh PIN every time, regardless of `privateUnlocked`, and a
   // successful check here authorizes only this one deletion. It must
   // never set/clear `privateUnlocked` (BOOMRNG-V2-DESIGN-SPEC.md §26).
+  // Also now the delete gate for pin-required constraints (see
+  // `handleDeleteClick`) — the same "always fresh" rule applies for the
+  // same reason: a destructive action must never trust a session unlock
+  // that was proven for a different constraint's protection.
   const [deleteVerifyTarget, setDeleteVerifyTarget] = useState<Constraint | null>(null);
   const [deleteVerifyPinInput, setDeleteVerifyPinInput] = useState('');
   const [deleteVerifyPinError, setDeleteVerifyPinError] = useState<string | null>(null);
+
+  // Edit authorization specifically for PIN-Required constraints — always
+  // fresh, deliberately never trusting `privateUnlocked`. Editing a
+  // pin-required constraint's behavior away from pin-required is exactly
+  // as consequential as deleting it (it removes the same protection), so
+  // it gets the delete flow's "always fresh" rule rather than the private
+  // -constraint edit flow's "trust an already-unlocked session" rule
+  // below. A constraint that is both private and pin-required is gated by
+  // this, the stricter of the two (see `handleEditClick`).
+  const [editVerifyTarget, setEditVerifyTarget] = useState<Constraint | null>(null);
+  const [editVerifyPinInput, setEditVerifyPinInput] = useState('');
+  const [editVerifyPinError, setEditVerifyPinError] = useState<string | null>(null);
 
   // Forgot-PIN recovery — its own state machine, separate from unlock and
   // delete authorization above. It never checks the PIN and never unlocks
@@ -119,7 +136,7 @@ export const Sites: React.FC<SitesProps> = ({
   const handleSubmitPin = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      if (pinInput === settings.pin) {
+      if (verifyPin(pinInput, settings.pin)) {
         onUnlockPrivate();
         setPinPromptOpen(false);
         setPinInput('');
@@ -139,6 +156,25 @@ export const Sites: React.FC<SitesProps> = ({
 
   const handleEditClick = useCallback(
     (constraint: Constraint) => {
+      // PIN-Required constraints are gated first, and always freshly —
+      // see the state declaration above for why this never trusts
+      // `privateUnlocked`. A constraint that is both private and
+      // pin-required is gated here, not by the private branch below.
+      if (constraint.behavior === 'pin-required') {
+        if (!pinConfigured) {
+          showToast('Set a PIN in Settings to edit this constraint', 'info');
+          return;
+        }
+        setPinPromptOpen(false);
+        setPendingEditConstraint(null);
+        setDeleteVerifyTarget(null);
+        setDeleteVerifyPinInput('');
+        setDeleteVerifyPinError(null);
+        setEditVerifyTarget(constraint);
+        setEditVerifyPinInput('');
+        setEditVerifyPinError(null);
+        return;
+      }
       if (constraint.isPrivate && !privateUnlocked) {
         if (!pinConfigured) {
           showToast('Set a PIN in Settings to edit private constraints', 'info');
@@ -152,11 +188,38 @@ export const Sites: React.FC<SitesProps> = ({
     [privateUnlocked, pinConfigured, showToast, openPinPrompt, onEditConstraint]
   );
 
+  const handleCancelEditVerify = useCallback(() => {
+    setEditVerifyTarget(null);
+    setEditVerifyPinInput('');
+    setEditVerifyPinError(null);
+  }, []);
+
+  const handleSubmitEditVerifyPin = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!editVerifyTarget) return;
+      if (authorizeConstraintMutation(editVerifyTarget, editVerifyPinInput, settings.pin)) {
+        const target = editVerifyTarget;
+        setEditVerifyTarget(null);
+        setEditVerifyPinInput('');
+        setEditVerifyPinError(null);
+        onEditConstraint(target);
+        return;
+      }
+      setEditVerifyPinError('Incorrect PIN. Try again.');
+      setEditVerifyPinInput('');
+    },
+    [editVerifyTarget, editVerifyPinInput, settings.pin, onEditConstraint]
+  );
+
   const handleDeleteClick = useCallback(
     (constraint: Constraint) => {
-      if (constraint.isPrivate) {
+      if (isPinProtected(constraint)) {
         if (!pinConfigured) {
-          showToast('Set a PIN in Settings to delete private constraints', 'info');
+          showToast(
+            constraint.isPrivate ? 'Set a PIN in Settings to delete private constraints' : 'Set a PIN in Settings to delete this constraint',
+            'info'
+          );
           return;
         }
         // Delete is destructive, so it never trusts an existing session
@@ -165,6 +228,9 @@ export const Sites: React.FC<SitesProps> = ({
         // pin-entry state left over from a different action.
         setPinPromptOpen(false);
         setPendingEditConstraint(null);
+        setEditVerifyTarget(null);
+        setEditVerifyPinInput('');
+        setEditVerifyPinError(null);
         setDeleteVerifyTarget(constraint);
         setDeleteVerifyPinInput('');
         setDeleteVerifyPinError(null);
@@ -186,7 +252,7 @@ export const Sites: React.FC<SitesProps> = ({
     (e: React.FormEvent) => {
       e.preventDefault();
       if (!deleteVerifyTarget) return;
-      if (deleteVerifyPinInput === settings.pin) {
+      if (authorizeConstraintMutation(deleteVerifyTarget, deleteVerifyPinInput, settings.pin)) {
         const target = deleteVerifyTarget;
         setDeleteVerifyTarget(null);
         setDeleteVerifyPinInput('');
@@ -233,6 +299,9 @@ export const Sites: React.FC<SitesProps> = ({
     setDeleteVerifyTarget(null);
     setDeleteVerifyPinInput('');
     setDeleteVerifyPinError(null);
+    setEditVerifyTarget(null);
+    setEditVerifyPinInput('');
+    setEditVerifyPinError(null);
     showToast(
       deletedCount > 0 ? `PIN reset. ${pluralize(deletedCount, 'constraint')} removed.` : 'PIN reset.',
       'success'
@@ -286,20 +355,41 @@ export const Sites: React.FC<SitesProps> = ({
         />
       ) : (
         <>
-          {hasPrivate &&
-            (deleteVerifyTarget ? (
-              <PinEntryForm
-                pinInput={deleteVerifyPinInput}
-                pinError={deleteVerifyPinError}
-                onPinInputChange={setDeleteVerifyPinInput}
-                onSubmit={handleSubmitDeleteVerifyPin}
-                onCancel={handleCancelDeleteVerify}
-                onForgotPin={handleOpenForgotPin}
-                submitLabel="Verify"
-                ariaLabel="Enter PIN to delete this private constraint"
-                helperText="Enter your PIN to delete this constraint."
-              />
-            ) : (
+          {editVerifyTarget ? (
+            // Rendered unconditionally (not gated on `hasPrivate`) — a
+            // PIN-Required constraint's edit gate must show up even in a
+            // popup with zero private constraints, which is the normal
+            // case for a PIN-Required-only setup.
+            <PinEntryForm
+              pinInput={editVerifyPinInput}
+              pinError={editVerifyPinError}
+              onPinInputChange={setEditVerifyPinInput}
+              onSubmit={handleSubmitEditVerifyPin}
+              onCancel={handleCancelEditVerify}
+              onForgotPin={handleOpenForgotPin}
+              submitLabel="Verify"
+              ariaLabel="Enter PIN to edit this constraint"
+              helperText="Enter your PIN to edit this constraint."
+            />
+          ) : deleteVerifyTarget ? (
+            // Same reasoning — unconditional, since this now also gates
+            // pin-required (not just private) deletion.
+            <PinEntryForm
+              pinInput={deleteVerifyPinInput}
+              pinError={deleteVerifyPinError}
+              onPinInputChange={setDeleteVerifyPinInput}
+              onSubmit={handleSubmitDeleteVerifyPin}
+              onCancel={handleCancelDeleteVerify}
+              onForgotPin={handleOpenForgotPin}
+              submitLabel="Verify"
+              ariaLabel="Enter PIN to delete this constraint"
+              helperText="Enter your PIN to delete this constraint."
+            />
+          ) : (
+            // The persistent reveal bar remains private-constraint-only —
+            // there is nothing to "reveal" for a public pin-required
+            // constraint, so it stays gated on `hasPrivate` alone.
+            hasPrivate && (
               <RevealBar
                 state={revealState}
                 pinInput={pinInput}
@@ -311,7 +401,8 @@ export const Sites: React.FC<SitesProps> = ({
                 onNavigateToSettings={onNavigateToSettings}
                 onForgotPin={handleOpenForgotPin}
               />
-            ))}
+            )
+          )}
 
           <div className={styles.listGroup}>
             {constraints.map((constraint) => (

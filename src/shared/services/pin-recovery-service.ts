@@ -1,5 +1,6 @@
 import type { Constraint } from '../types/constraint';
 import { loadSettings, saveSettings, loadConstraints, saveConstraints } from '../storage/storage-service';
+import { verifyPin } from './pin-service';
 
 /**
  * A constraint that depends on the PIN existing at all — either it's
@@ -12,6 +13,28 @@ import { loadSettings, saveSettings, loadConstraints, saveConstraints } from '..
  */
 export function isPinProtected(constraint: Constraint): boolean {
   return constraint.isPrivate || constraint.behavior === 'pin-required';
+}
+
+/**
+ * The single authorization decision Sites.tsx's edit/delete handlers make
+ * before acting on a constraint. Not recovery-specific, but colocated
+ * here because it composes `isPinProtected()` above directly rather than
+ * re-deriving "does this constraint need a PIN" a second time —
+ * everything actually pin-required or private must clear this before
+ * being edited or deleted, closing the gap where a PIN-Required
+ * constraint's own protection could be defeated by simply editing its
+ * behavior away (or deleting it) from Sites, no PIN required, since
+ * Sites previously only gated on `isPrivate`.
+ *
+ * Delegates the actual comparison to `verifyPin()` — the one place a
+ * candidate is ever compared against the stored PIN — rather than a
+ * second, parallel comparison. Returns `true` immediately, without
+ * looking at the candidate at all, for any constraint `isPinProtected`
+ * already says doesn't need one.
+ */
+export function authorizeConstraintMutation(constraint: Constraint, candidatePin: string, storedPin: string | null): boolean {
+  if (!isPinProtected(constraint)) return true;
+  return verifyPin(candidatePin, storedPin);
 }
 
 export interface PinResetResult {

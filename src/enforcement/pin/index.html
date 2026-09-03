@@ -7,18 +7,44 @@
   <link rel="stylesheet" href="../shared/enforcement.css">
 </head>
 <body>
-  <div class="enforcement-page">
-    <div class="enforcement-icon pin">🔑</div>
-    <h1 class="enforcement-title">PIN Required</h1>
-    <p class="enforcement-message">Enter your PIN to continue to this site.</p>
-    <div class="enforcement-domain" id="domain"></div>
-    <input type="password" class="input" id="pin" placeholder="Enter PIN" maxlength="6" autocomplete="off">
-    <div class="error-text" id="error"></div>
-    <div class="enforcement-actions">
-      <button class="btn btn-primary" id="submit">Verify PIN</button>
-      <button class="btn btn-secondary" id="goBack">Go back</button>
+  <main class="enf" id="page" hidden>
+    <svg class="glyph" viewBox="0 0 20 20" aria-hidden="true">
+      <rect x="5" y="9" width="10" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M7 9V6.6a3 3 0 0 1 6 0V9" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    </svg>
+    <div class="domain-chip" id="domain" hidden></div>
+
+    <div id="pinAvailable" hidden>
+      <h1>This site requires your PIN.</h1>
+      <form id="pinForm">
+        <input
+          type="password"
+          class="pin-input"
+          id="pin"
+          inputmode="numeric"
+          autocomplete="off"
+          maxlength="6"
+          placeholder="••••"
+          aria-label="PIN"
+          aria-describedby="error"
+          aria-invalid="false"
+        >
+        <p class="error-text" id="error" role="alert" aria-live="assertive"></p>
+        <div class="enf-actions">
+          <button type="submit" class="btn btn-primary" id="submit">Verify PIN</button>
+          <button type="button" class="link-btn" id="goBack">Back to what I was doing</button>
+        </div>
+      </form>
     </div>
-  </div>
+
+    <div id="pinUnavailable" hidden>
+      <h1>PIN isn&rsquo;t configured.</h1>
+      <p class="sub">Set a PIN in Boomrng Settings to continue.</p>
+      <div class="enf-actions">
+        <button type="button" class="btn btn-primary" id="goBackUnavailable">Back to what I was doing</button>
+      </div>
+    </div>
+  </main>
   <div class="brand">boomrng</div>
   <script type="module" src="./pin.ts"></script>
 </body>
