@@ -1,5 +1,4 @@
-import { getDomain, goBackToOriginal, goBackOrToOriginal, requestContinuation, sendMessage, reconcileStaleEnforcementPage } from '../shared/utils';
-import { loadEnforcementContext } from '../../shared/services';
+import { goBackToOriginal, goBackOrToOriginal, requestContinuation, sendMessage, reconcileStaleEnforcementPage, resolveEnforcementContext } from '../shared/utils';
 import { getRemainingMs, buildDelayView } from './delay-view';
 import type { MessageResponse } from '../../shared/types/messages';
 
@@ -12,7 +11,11 @@ const continueBtn = document.getElementById('continue') as HTMLButtonElement | n
 const goBackBtn = document.getElementById('goBack') as HTMLButtonElement | null;
 const errorEl = document.getElementById('error');
 
-const domain = getDomain();
+// Resolved asynchronously inside init(), before the page (and therefore
+// GET_DELAY_WINDOW/the click handlers below) is ever reached —
+// BOOMRNG-V2-DESIGN-SPEC.md §30.7: the domain is no longer synchronously
+// available from the URL.
+let domain: string | null = null;
 
 const RING_RADIUS = 48;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
@@ -94,8 +97,10 @@ document.addEventListener('keydown', (event) => {
 });
 
 async function init(): Promise<void> {
-  const { constraint } = await loadEnforcementContext(domain);
+  const { constraint } = await resolveEnforcementContext();
   if (reconcileStaleEnforcementPage(constraint)) return;
+
+  domain = constraint?.domain ?? null;
 
   // Reconciliation above already confirmed the live constraint is a
   // genuine, matching `delay` behavior — so by the time GET_DELAY_WINDOW

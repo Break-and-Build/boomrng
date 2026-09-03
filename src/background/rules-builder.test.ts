@@ -55,28 +55,34 @@ describe('buildBlockedSiteRegexFilter', () => {
 
 describe('buildRedirectSubstitution', () => {
   it('places the whole-match token after a literal "#", never in a query position', () => {
-    const substitution = buildRedirectSubstitution(EXT_ID, 'src/enforcement/checkpoint/index.html', 'example.com', 'checkpoint');
+    const substitution = buildRedirectSubstitution(EXT_ID, 'src/enforcement/checkpoint/index.html', 'c1', 'checkpoint');
     expect(substitution).toBe(
-      `chrome-extension://${EXT_ID}/dist/src/enforcement/checkpoint/index.html?domain=example.com&behavior=checkpoint#\\0`
+      `chrome-extension://${EXT_ID}/dist/src/enforcement/checkpoint/index.html?cid=c1&behavior=checkpoint#\\0`
     );
     expect(substitution.endsWith('#\\0')).toBe(true);
   });
 
-  it('percent-encodes the domain and behavior query values', () => {
-    const substitution = buildRedirectSubstitution(EXT_ID, 'src/enforcement/pin/index.html', 'exämple.com', 'pin-required');
-    expect(substitution).toContain(`domain=${encodeURIComponent('exämple.com')}`);
+  it('percent-encodes the constraint id and behavior query values', () => {
+    const substitution = buildRedirectSubstitution(EXT_ID, 'src/enforcement/pin/index.html', 'id with spaces', 'pin-required');
+    expect(substitution).toContain(`cid=${encodeURIComponent('id with spaces')}`);
     expect(substitution).toContain('behavior=pin-required');
+  });
+
+  it('never places the domain anywhere in the redirect target (BOOMRNG-V2-DESIGN-SPEC.md §30.7)', () => {
+    const substitution = buildRedirectSubstitution(EXT_ID, 'src/enforcement/checkpoint/index.html', 'c1', 'checkpoint');
+    expect(substitution).not.toContain('domain=');
   });
 });
 
 describe('generateRules', () => {
   it('generates exactly one REDIRECT rule per blocked domain, using regexFilter/regexSubstitution', () => {
-    const rules = generateRules([{ url: 'example.com', behavior: 'checkpoint' }], [], EXT_ID);
+    const rules = generateRules([{ url: 'example.com', behavior: 'checkpoint', id: 'c1' }], [], EXT_ID);
     const redirectRules = rules.filter((r) => r.action.type === 'redirect');
     expect(redirectRules).toHaveLength(1);
     expect(redirectRules[0].condition.urlFilter).toBeUndefined();
     expect(redirectRules[0].condition.regexFilter).toBe(buildBlockedSiteRegexFilter('example.com'));
     expect(redirectRules[0].action.redirect?.url).toBeUndefined();
+    expect(redirectRules[0].action.redirect?.regexSubstitution).toContain('cid=c1');
     expect(redirectRules[0].action.redirect?.regexSubstitution).toContain('behavior=checkpoint');
     expect(redirectRules[0].action.redirect?.regexSubstitution?.endsWith('#\\0')).toBe(true);
   });
@@ -84,29 +90,30 @@ describe('generateRules', () => {
   it('routes each behavior to its own enforcement page', () => {
     const rules = generateRules(
       [
-        { url: 'a.com', behavior: 'checkpoint' },
-        { url: 'b.com', behavior: 'delay' },
-        { url: 'c.com', behavior: 'pin-required' },
-        { url: 'd.com', behavior: 'hard-block' },
+        { url: 'a.com', behavior: 'checkpoint', id: 'id-a' },
+        { url: 'b.com', behavior: 'delay', id: 'id-b' },
+        { url: 'c.com', behavior: 'pin-required', id: 'id-c' },
+        { url: 'd.com', behavior: 'hard-block', id: 'id-d' },
       ],
       [],
       EXT_ID
     );
-    const pageFor = (domain: string) =>
-      rules.find((r) => r.action.redirect?.regexSubstitution?.includes(`domain=${domain}`))?.action.redirect
+    const pageFor = (cid: string) =>
+      rules.find((r) => r.action.redirect?.regexSubstitution?.includes(`cid=${cid}`))?.action.redirect
         ?.regexSubstitution;
 
-    expect(pageFor('a.com')).toContain('/enforcement/checkpoint/');
-    expect(pageFor('b.com')).toContain('/enforcement/delay/');
-    expect(pageFor('c.com')).toContain('/enforcement/pin/');
-    expect(pageFor('d.com')).toContain('/enforcement/block/');
+    expect(pageFor('id-a')).toContain('/enforcement/checkpoint/');
+    expect(pageFor('id-b')).toContain('/enforcement/delay/');
+    expect(pageFor('id-c')).toContain('/enforcement/pin/');
+    expect(pageFor('id-d')).toContain('/enforcement/block/');
   });
 
   it('normalizes domains before keying rules, so www./https:// variants collapse to one rule', () => {
-    const rules = generateRules([{ url: 'https://www.example.com', behavior: 'checkpoint' }], [], EXT_ID);
+    const rules = generateRules([{ url: 'https://www.example.com', behavior: 'checkpoint', id: 'c1' }], [], EXT_ID);
     const redirectRules = rules.filter((r) => r.action.type === 'redirect');
     expect(redirectRules).toHaveLength(1);
-    expect(redirectRules[0].action.redirect?.regexSubstitution).toContain('domain=example.com');
+    expect(redirectRules[0].condition.regexFilter).toBe(buildBlockedSiteRegexFilter('example.com'));
+    expect(redirectRules[0].action.redirect?.regexSubstitution).toContain('cid=c1');
   });
 
   it('still generates an ALLOW rule for a single-label allowed site (e.g. the default "localhost")', () => {
@@ -117,7 +124,7 @@ describe('generateRules', () => {
   });
 
   it('excludes a blocked constraint domain that is also in the allow list', () => {
-    const rules = generateRules([{ url: 'example.com', behavior: 'checkpoint' }], ['example.com'], EXT_ID);
+    const rules = generateRules([{ url: 'example.com', behavior: 'checkpoint', id: 'c1' }], ['example.com'], EXT_ID);
     const redirectRules = rules.filter((r) => r.action.type === 'redirect');
     expect(redirectRules).toHaveLength(0);
   });
@@ -125,8 +132,8 @@ describe('generateRules', () => {
   it('two constraints colliding on the same effective domain produce exactly one rule (defensive fallback, not a policy)', () => {
     const rules = generateRules(
       [
-        { url: 'example.com', behavior: 'checkpoint' },
-        { url: 'www.example.com', behavior: 'hard-block' },
+        { url: 'example.com', behavior: 'checkpoint', id: 'c1' },
+        { url: 'www.example.com', behavior: 'hard-block', id: 'c2' },
       ],
       [],
       EXT_ID
@@ -145,7 +152,7 @@ describe('generateRules', () => {
   });
 
   it('skips a blocked site whose domain fails to normalize', () => {
-    const rules = generateRules([{ url: 'not a domain', behavior: 'checkpoint' }], [], EXT_ID);
+    const rules = generateRules([{ url: 'not a domain', behavior: 'checkpoint', id: 'c1' }], [], EXT_ID);
     expect(rules.filter((r) => r.action.type === 'redirect')).toHaveLength(0);
   });
 
@@ -167,7 +174,7 @@ describe('generateRules', () => {
     // pins down the fact that motivates it, so it can't silently stop
     // being true without a test noticing.
     it('the same rule matches the exact URL that "Continue" would navigate to', () => {
-      const rules = generateRules([{ url: 'facebook.com', behavior: 'checkpoint' }], [], EXT_ID);
+      const rules = generateRules([{ url: 'facebook.com', behavior: 'checkpoint', id: 'c1' }], [], EXT_ID);
       const redirectRule = rules.find((r) => r.action.type === 'redirect');
       expect(redirectRule).toBeDefined();
 
@@ -180,7 +187,7 @@ describe('generateRules', () => {
     });
 
     it('remains true for a subdomain-qualified constraint too', () => {
-      const rules = generateRules([{ url: 'reddit.com', behavior: 'delay' }], [], EXT_ID);
+      const rules = generateRules([{ url: 'reddit.com', behavior: 'delay', id: 'c1' }], [], EXT_ID);
       const redirectRule = rules.find((r) => r.action.type === 'redirect');
       const regex = new RegExp(redirectRule!.condition.regexFilter!);
       expect(regex.test('https://old.reddit.com/r/anything')).toBe(true);

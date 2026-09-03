@@ -1,5 +1,4 @@
-import { getDomain, goBackToOriginal, goBackOrToOriginal, requestContinuation, reconcileStaleEnforcementPage } from '../shared/utils';
-import { loadEnforcementContext } from '../../shared/services';
+import { goBackToOriginal, goBackOrToOriginal, requestContinuation, reconcileStaleEnforcementPage, resolveEnforcementContext } from '../shared/utils';
 import { buildCheckpointView } from './checkpoint-view';
 
 const pageEl = document.getElementById('page');
@@ -11,7 +10,10 @@ const continueBtn = document.getElementById('continue') as HTMLButtonElement | n
 const goBackBtn = document.getElementById('goBack') as HTMLButtonElement | null;
 const errorEl = document.getElementById('error');
 
-const domain = getDomain();
+// Resolved asynchronously inside init(), before the page (and therefore
+// these click handlers) is ever revealed — BOOMRNG-V2-DESIGN-SPEC.md
+// §30.7: the domain is no longer synchronously available from the URL.
+let domain: string | null = null;
 
 // Guards against a rapid double-click sending two overlapping requests
 // from this page — a defense-in-depth measure only. Correctness does not
@@ -69,9 +71,10 @@ document.addEventListener('keydown', (event) => {
 });
 
 async function init(): Promise<void> {
-  const { constraint } = await loadEnforcementContext(domain);
+  const { constraint } = await resolveEnforcementContext();
   if (reconcileStaleEnforcementPage(constraint)) return;
 
+  domain = constraint?.domain ?? null;
   const view = buildCheckpointView(domain, constraint);
 
   if (headlineEl) headlineEl.textContent = view.headline;

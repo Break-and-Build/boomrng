@@ -1,12 +1,9 @@
-import { getDomain, reconcileStaleEnforcementPage } from '../shared/utils';
-import { loadEnforcementContext } from '../../shared/services';
+import { reconcileStaleEnforcementPage, resolveEnforcementContext } from '../shared/utils';
 import { buildBlockView } from './block-view';
 
 const pageEl = document.getElementById('page');
 const domainChipEl = document.getElementById('domain');
 const goBackBtn = document.getElementById('goBack') as HTMLButtonElement | null;
-
-const domain = getDomain();
 
 /**
  * Deliberately plain `history.back()` — NOT `goBackOrToOriginal()` or
@@ -38,9 +35,10 @@ document.addEventListener('keydown', (event) => {
 });
 
 async function init(): Promise<void> {
-  const { constraint } = await loadEnforcementContext(domain);
+  const { constraint } = await resolveEnforcementContext();
   if (reconcileStaleEnforcementPage(constraint)) return;
 
+  const domain = constraint?.domain ?? null;
   const view = buildBlockView(domain, constraint);
 
   if (view.showDomain && domain && domainChipEl) {

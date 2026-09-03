@@ -2,6 +2,54 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <!--
+    Earliest possible synchronous script — plain classic script, not
+    type="module" (which defers), placed before any stylesheet/module
+    load. BOOMRNG-V2-DESIGN-SPEC.md §30.7: Chrome's DNR redirect briefly
+    carries the original destination in the URL fragment before any page
+    script can run at all; this reads it, stores it, and strips it from
+    the visible URL as fast as page-controlled JS possibly can, closing
+    the window as tightly as achievable without a new permission. See
+    enforcement/shared/utils.ts's ORIGINAL_URL_STORAGE_KEY/getOriginalUrl()
+    for the read side. validation-service.ts's validateUrl() is the
+    canonical http(s)-only check reused here, and this whole snippet mirrors
+    enforcement/shared/utils.ts's computeOriginalUrlBootstrapAction()/applyOriginalUrlBootstrapAction()
+    (kept in sync manually — a module import is not available this early).
+  -->
+  <script>
+    (function () {
+      var KEY = 'boomrng_original_url';
+      var hash = window.location.hash;
+      if (hash && hash.length > 1) {
+        var raw = hash.slice(1);
+        var valid = null;
+        try {
+          var u = new URL(raw);
+          if (u.protocol === 'http:' || u.protocol === 'https:') valid = raw;
+        } catch (e) {}
+        if (!valid) {
+          try {
+            var decoded = decodeURIComponent(raw);
+            var u2 = new URL(decoded);
+            if (u2.protocol === 'http:' || u2.protocol === 'https:') valid = decoded;
+          } catch (e) {}
+        }
+        try {
+          if (valid) {
+            window.sessionStorage.setItem(KEY, valid);
+          } else {
+            // Present but invalid: clear rather than leave alone, so a
+            // malformed fresh handoff can never inherit an unrelated
+            // previous destination stored in the same tab.
+            window.sessionStorage.removeItem(KEY);
+          }
+        } catch (e) {}
+      }
+      try {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      } catch (e) {}
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Delay — boomrng</title>
   <link rel="stylesheet" href="../shared/enforcement.css">

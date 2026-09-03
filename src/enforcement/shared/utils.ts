@@ -1,7 +1,22 @@
 import { validateUrl } from '../../shared/services/validation-service';
-import { getEnforcementPagePath } from '../../shared/services/enforcement-context-service';
+import { getEnforcementPagePath, loadEnforcementContext, loadEnforcementContextById, type EnforcementContext } from '../../shared/services/enforcement-context-service';
 import type { Constraint } from '../../shared/types/constraint';
 import type { MessageResponse } from '../../shared/types/messages';
+
+/**
+ * The one key every enforcement page's earliest inline bootstrap script
+ * (see each page's own `index.html` `<head>`, first element, plain
+ * classic script — not this module, which loads as a deferred
+ * `type="module"` and would run too late to matter here) writes the
+ * original destination into, and this module reads it back from.
+ * BOOMRNG-V2-DESIGN-SPEC.md §30.7. Plain `sessionStorage`, not
+ * `chrome.storage.session`: it's automatically scoped per tab (no manual
+ * tabId bookkeeping needed), needs no permission beyond what a page
+ * already has, and survives a same-origin internal navigation within the
+ * same tab (exactly what a stale-route reconciliation reroute is) while
+ * being cleared automatically when the tab closes.
+ */
+export const ORIGINAL_URL_STORAGE_KEY = 'boomrng_original_url';
 
 export function getUrlParam(name: string): string | null {
   const params = new URLSearchParams(window.location.search);
@@ -28,26 +43,72 @@ export function getOriginalUrlFromHash(): string | null {
   return hash.slice(1);
 }
 
+export type OriginalUrlBootstrapAction = { type: 'store'; value: string } | { type: 'clear' } | { type: 'noop' };
+
 /**
- * Resolves the fragment into a *safe, navigable* http/https URL, or
- * `null` if nothing usable is present. Two things happen beyond a plain
- * extraction:
+ * The exact decision each enforcement page's earliest inline bootstrap
+ * script (see e.g. `checkpoint/index.html`'s `<head>`, first element)
+ * re-implements as raw, duplicated classic JS — that script runs before
+ * any module code, including this one, so it cannot import this
+ * function directly. This is the tested, canonical specification the
+ * four inline copies are written to match; if this function's behavior
+ * ever changes, the four copies need updating by hand to match, and
+ * vice versa.
  *
- * - A single defensive `decodeURIComponent` pass is attempted if the raw
- *   fragment text isn't itself a valid URL — the fragment is expected to
- *   already be raw, unencoded text (that's what `rules-builder.ts`'s
- *   `regexSubstitution` produces, and empirically what `location.hash`
- *   returns for it), so this exists only to tolerate anything upstream
- *   that percent-encoded the fragment as a whole rather than to reverse
- *   encoding that's expected to be there.
- * - The result is validated as an actual http/https URL before being
- *   trusted for navigation (reusing the same check the popup already
- *   applies to URL input, `validateUrl()`). A malformed fragment, an
- *   empty one, or a non-http(s) scheme (`javascript:`, `data:`, a bare
- *   `chrome-extension:` URL, etc.) must never reach a caller that's about
- *   to navigate to it — this is what makes `goBackToOriginal()` safe to
- *   call unconditionally, and it's a deliberate, explicit rejection
- *   rather than an accident of `new URL()` throwing.
+ * BOOMRNG-V2-DESIGN-SPEC.md §30.7 lifecycle rule: hash present + valid
+ * http(s) URL → overwrite; hash present + invalid → **clear** (never
+ * silently inherit a previous, unrelated stored destination in the same
+ * tab); hash absent → **noop**, leaving whatever is already stored alone
+ * (the refresh/reconciliation-reuse case).
+ */
+export function computeOriginalUrlBootstrapAction(hash: string | null): OriginalUrlBootstrapAction {
+  if (!hash || hash.length <= 1) return { type: 'noop' };
+  const raw = hash.slice(1);
+  if (validateUrl(raw)) return { type: 'store', value: raw };
+  try {
+    const decoded = decodeURIComponent(raw);
+    if (validateUrl(decoded)) return { type: 'store', value: decoded };
+  } catch {
+    // Malformed percent-encoding — falls through to 'clear' below.
+  }
+  return { type: 'clear' };
+}
+
+/** Applies the decision above to `sessionStorage` — see `computeOriginalUrlBootstrapAction()`'s own doc comment; the same duplication caveat applies. */
+export function applyOriginalUrlBootstrapAction(action: OriginalUrlBootstrapAction): void {
+  try {
+    if (action.type === 'store') {
+      window.sessionStorage.setItem(ORIGINAL_URL_STORAGE_KEY, action.value);
+    } else if (action.type === 'clear') {
+      window.sessionStorage.removeItem(ORIGINAL_URL_STORAGE_KEY);
+    }
+  } catch {
+    // sessionStorage can throw in rare restricted contexts.
+  }
+}
+
+/**
+ * Resolves to a *safe, navigable* http/https URL, or `null` if nothing
+ * usable is present. Three layers, in order, per
+ * BOOMRNG-V2-DESIGN-SPEC.md §30.7:
+ *
+ * 1. **The hash, defensively.** By the time this module (a deferred
+ *    `type="module"` script) runs, the page's own earliest inline
+ *    bootstrap script has already read, validated, stored, and stripped
+ *    the fragment — so this should normally find nothing. It's kept as a
+ *    first check only in case that bootstrap step somehow didn't run,
+ *    rather than silently falling through to a worse answer.
+ * 2. **`sessionStorage`, the primary path** — what the bootstrap script
+ *    actually stored. Re-validated here even though it was already
+ *    validated at write time: never trust page-writable storage again
+ *    at the point of use without re-checking, the same discipline
+ *    applied everywhere else in this codebase a stored value feeds a
+ *    navigation decision.
+ * 3. **The domain-guess fallback** — unchanged from before this
+ *    milestone, reachable if a page is opened with neither a usable
+ *    fragment nor a stored value (manually, during development, or a
+ *    genuinely corrupted state). Still loses path/query, still a last
+ *    resort, never the primary path.
  */
 export function getOriginalUrl(): string | null {
   const raw = getOriginalUrlFromHash();
@@ -63,13 +124,16 @@ export function getOriginalUrl(): string | null {
     }
   }
 
-  // Fallback only — reachable if a page is opened without a usable
-  // fragment (e.g. manually, during development, or a corrupted one).
-  // This intentionally still loses path/query, which is exactly why it's
-  // a fallback and never the primary path. Do not recreate the original
-  // Milestone 0 bug by reaching for this whenever the fragment is
-  // present but merely inconvenient — it's a last resort.
-  const domain = getUrlParam('domain');
+  let stored: string | null = null;
+  try {
+    stored = window.sessionStorage.getItem(ORIGINAL_URL_STORAGE_KEY);
+  } catch {
+    // sessionStorage can throw in rare restricted contexts — fall through.
+  }
+  if (stored && validateUrl(stored)) return stored;
+
+  // Domain-guess fallback only — see §30.7 and the doc comment above.
+  const domain = getDomain();
   if (domain) {
     const guessed = `https://${domain}`;
     return validateUrl(guessed) ? guessed : null;
@@ -78,12 +142,37 @@ export function getOriginalUrl(): string | null {
   return null;
 }
 
+/** `?domain=` — retained narrowly for backward compatibility with an already-open, pre-Milestone-7 enforcement page URL across an extension update (BOOMRNG-V2-DESIGN-SPEC.md §30.7); `getConstraintId()` is the primary lookup a fresh page uses. */
 export function getDomain(): string | null {
   return getUrlParam('domain');
 }
 
+/** `?cid=` — the opaque constraint id an enforcement page's URL now carries instead of its domain (BOOMRNG-V2-DESIGN-SPEC.md §30.7). */
+export function getConstraintId(): string | null {
+  return getUrlParam('cid');
+}
+
 export function getBehavior(): string | null {
   return getUrlParam('behavior');
+}
+
+/**
+ * The one place every enforcement page resolves "which constraint am I
+ * for" — prefers the opaque `cid` (BOOMRNG-V2-DESIGN-SPEC.md §30.7);
+ * falls back to the legacy `domain` param only when `cid` is absent, so
+ * an enforcement page already open with a pre-Milestone-7 URL at the
+ * moment of an extension update still resolves correctly the next time
+ * it loads (e.g. on refresh), without needing a distinct migration step.
+ * A fresh redirect after this milestone's rules regenerate always
+ * carries `cid`, so this fallback is expected to become unreachable in
+ * practice shortly after an update, not a permanent second code path.
+ */
+export async function resolveEnforcementContext(): Promise<EnforcementContext> {
+  const cid = getConstraintId();
+  if (cid) {
+    return loadEnforcementContextById(cid);
+  }
+  return loadEnforcementContext(getDomain());
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -187,6 +276,17 @@ export function goBackOrToOriginal(): void {
  * §30.9: query params are never authoritative) — it's included on the
  * rebuilt URL only to keep the same shape `rules-builder.ts` produces.
  *
+ * **Never re-embeds the original destination (§30.7).** The rebuilt
+ * target carries only `cid`/`behavior` — no fragment at all. This is
+ * safe, not lossy: `sessionStorage[ORIGINAL_URL_STORAGE_KEY]` already
+ * holds it (written by the page's own earliest inline bootstrap script
+ * on first arrival) and survives this same-origin, same-tab
+ * `location.replace()` navigation, so the destination page reads it
+ * back from there instead. A pleasant side effect of the opaque-id
+ * redesign: previously, *every* reconciliation hop re-exposed the
+ * domain and full destination in the next fragment, even for an
+ * already-private constraint — that no longer happens even once.
+ *
  * Returns `true` if this function already navigated the page away (the
  * caller must stop its own `init()` immediately without doing anything
  * else); `false` if the live behavior matches this page and normal
@@ -211,12 +311,10 @@ export function reconcileStaleEnforcementPage(constraint: Constraint | null): bo
     return false;
   }
 
-  const original = getOriginalUrlFromHash();
-  const domain = getDomain();
   const target = new URL(`chrome-extension://${chrome.runtime.id}/dist/${canonicalPath}`);
-  if (domain) target.searchParams.set('domain', domain);
+  target.searchParams.set('cid', constraint.id);
   target.searchParams.set('behavior', constraint.behavior);
 
-  window.location.replace(original ? `${target.toString()}#${original}` : target.toString());
+  window.location.replace(target.toString());
   return true;
 }

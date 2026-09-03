@@ -1,5 +1,4 @@
-import { getDomain, goBackToOriginal, goBackOrToOriginal, requestContinuation, sendMessage, reconcileStaleEnforcementPage } from '../shared/utils';
-import { loadEnforcementContext } from '../../shared/services';
+import { goBackToOriginal, goBackOrToOriginal, requestContinuation, sendMessage, reconcileStaleEnforcementPage, resolveEnforcementContext } from '../shared/utils';
 import { buildPinView, isSubmittablePin, shouldAutoSubmit } from './pin-view';
 import type { MessageResponse } from '../../shared/types/messages';
 
@@ -14,7 +13,10 @@ const goBackBtn = document.getElementById('goBack') as HTMLButtonElement | null;
 const goBackUnavailableBtn = document.getElementById('goBackUnavailable') as HTMLButtonElement | null;
 const errorEl = document.getElementById('error');
 
-const domain = getDomain();
+// Resolved asynchronously inside init(), before the form/submit handlers
+// below can ever fire — BOOMRNG-V2-DESIGN-SPEC.md §30.7: the domain is
+// no longer synchronously available from the URL.
+let domain: string | null = null;
 
 const SHAKE_DURATION_MS = 300;
 
@@ -123,9 +125,10 @@ document.addEventListener('keydown', (event) => {
 });
 
 async function init(): Promise<void> {
-  const { constraint, settings } = await loadEnforcementContext(domain);
+  const { constraint, settings } = await resolveEnforcementContext();
   if (reconcileStaleEnforcementPage(constraint)) return;
 
+  domain = constraint?.domain ?? null;
   const view = buildPinView(domain, constraint, settings.pin);
 
   if (view.showDomain && domain && domainChipEl) {

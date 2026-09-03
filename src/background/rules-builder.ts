@@ -5,6 +5,8 @@ import { getEnforcementPagePath } from '../shared/services/enforcement-context-s
 interface BlockedSite {
   url: string;
   behavior: ConstraintBehavior;
+  /** The owning constraint's own stable id — BOOMRNG-V2-DESIGN-SPEC.md §30.7: this, not the domain, is what the redirect target's query string carries. */
+  id: string;
 }
 
 /**
@@ -69,17 +71,25 @@ export function buildBlockedSiteRegexFilter(host: string): string {
  * its own `&`/`=`/`#`/`?` would corrupt a query-parameter position, but a
  * URL fragment is never split into key/value pairs by the browser and can
  * hold that text verbatim (BOOMRNG-V2-DESIGN-SPEC.md §30.1). This is the
- * one and only place the original destination is preserved — recreating
- * the previous bare-`https://{domain}` reconstruction anywhere else in
- * this pipeline defeats it.
+ * one and only place the original destination is preserved.
+ *
+ * The query string carries the constraint's own opaque `id` (`cid`), not
+ * its domain (§30.7 — the enforcement page resolves `cid` to the live
+ * constraint itself, then uses `constraint.domain` for everything
+ * downstream; nothing about that resolution needs the domain to appear
+ * in a URL at all). The `#\0` fragment handoff is unchanged: each
+ * enforcement page's earliest inline bootstrap script (see its own
+ * `index.html`) reads it once, stores it in `sessionStorage`, and strips
+ * it before any other page code runs — the fragment is never left
+ * sitting in the visible URL past that first synchronous step.
  */
 export function buildRedirectSubstitution(
   extensionId: string,
   pagePath: string,
-  host: string,
+  constraintId: string,
   behavior: ConstraintBehavior
 ): string {
-  return `chrome-extension://${extensionId}/dist/${pagePath}?domain=${encodeURIComponent(host)}&behavior=${encodeURIComponent(behavior)}#\\0`;
+  return `chrome-extension://${extensionId}/dist/${pagePath}?cid=${encodeURIComponent(constraintId)}&behavior=${encodeURIComponent(behavior)}#\\0`;
 }
 
 export function generateRules(
@@ -126,16 +136,16 @@ export function generateRules(
   // fallback that prevents generating two conflicting DNR rules for one
   // domain, not a designed precedence rule, and which one "wins" here is
   // deliberately left unspecified.
-  const blockedByBehavior = new Map<string, { host: string; behavior: ConstraintBehavior }>();
+  const blockedByBehavior = new Map<string, { host: string; behavior: ConstraintBehavior; id: string }>();
 
   for (const site of blockedSites) {
     const host = normalizeDomain(site.url);
     if (!host) continue;
     if (allowedHosts.has(host)) continue;
-    blockedByBehavior.set(host, { host, behavior: site.behavior });
+    blockedByBehavior.set(host, { host, behavior: site.behavior, id: site.id });
   }
 
-  for (const [, { host, behavior }] of blockedByBehavior) {
+  for (const [, { host, behavior, id: constraintId }] of blockedByBehavior) {
     const pagePath = getEnforcementPagePath(behavior);
 
     rules.push({
@@ -143,7 +153,10 @@ export function generateRules(
       priority: 1,
       action: {
         type: chrome.declarativeNetRequest.RuleActionType.REDIRECT,
-        redirect: { regexSubstitution: buildRedirectSubstitution(extensionId, pagePath, host, behavior) },
+        // `host` remains the DNR match condition below (which requests get
+        // redirected) — only the redirect *target*'s query string moved to
+        // the opaque `constraintId` (§30.7).
+        redirect: { regexSubstitution: buildRedirectSubstitution(extensionId, pagePath, constraintId, behavior) },
       },
       condition: {
         regexFilter: buildBlockedSiteRegexFilter(host),

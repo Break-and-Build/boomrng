@@ -125,6 +125,7 @@ async function updateEnforcementRules(): Promise<void> {
   const blockedSites = constraints.map((c) => ({
     url: c.domain,
     behavior: c.behavior,
+    id: c.id,
   }));
 
   const extensionId = getExtensionId();

@@ -32,6 +32,17 @@ export function findMatchingConstraint(domain: string | null, constraints: Const
 }
 
 /**
+ * The id-based counterpart to `findMatchingConstraint()` — BOOMRNG-V2-DESIGN-SPEC.md
+ * §30.7's opaque-identity fix: enforcement URLs carry a constraint's own
+ * stable `id` instead of its domain, so an id is exact-matched here
+ * rather than needing any domain normalization at all.
+ */
+export function findConstraintById(id: string | null, constraints: Constraint[]): Constraint | null {
+  if (!id) return null;
+  return constraints.find((c) => c.id === id) ?? null;
+}
+
+/**
  * The single canonical mapping from a constraint's live `behavior` to the
  * enforcement page it belongs on — the same collapsing `rules-builder.ts`
  * uses to pick a DNR redirect target (legacy `reflection`/`custom-message`
@@ -67,6 +78,15 @@ export async function loadEnforcementContext(domain: string | null): Promise<Enf
   const [constraints, settings] = await Promise.all([loadConstraints(), loadSettings()]);
   return {
     constraint: findMatchingConstraint(domain, constraints),
+    settings,
+  };
+}
+
+/** The id-based counterpart to `loadEnforcementContext()` — see `findConstraintById()`. */
+export async function loadEnforcementContextById(id: string | null): Promise<EnforcementContext> {
+  const [constraints, settings] = await Promise.all([loadConstraints(), loadSettings()]);
+  return {
+    constraint: findConstraintById(id, constraints),
     settings,
   };
 }
