@@ -73,7 +73,7 @@ export const RevealBar: React.FC<RevealBarProps> = ({
         )}
         {state === 'unlocked' && (
           <>
-            <span className={`${styles.text} ${styles.unlockedText}`}>Private constraints unlocked</span>
+            <span className={`${styles.text} ${styles.unlockedText}`}>Private constraints unlocked.</span>
             <button type="button" className={styles.ghostAction} onClick={onLock}>
               Lock again
             </button>

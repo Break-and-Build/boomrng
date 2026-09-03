@@ -484,7 +484,7 @@ export const Settings: React.FC = () => {
 
       <Modal isOpen={howItWorksOpen} onClose={() => setHowItWorksOpen(false)} title="How constraints work">
         <p className={styles.modalIntro}>
-          Each site you add gets one of four behaviors, in increasing order of friction:
+          Each site you add gets one of four behaviors, in increasing order of friction — Checkpoint → Delay → PIN Required → Hard Block:
         </p>
         <div className={styles.behaviorList}>
           <div className={styles.behaviorItem}>

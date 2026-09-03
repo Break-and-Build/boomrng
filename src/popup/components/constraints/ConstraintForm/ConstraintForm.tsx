@@ -168,9 +168,25 @@ export const ConstraintForm: React.FC<ConstraintFormProps> = ({
         <span className={styles.toggleBox} aria-hidden="true" />
         <span>
           <span className={styles.toggleTitle}>Private constraint</span>
-          <span className={styles.toggleHint}>Hide this site&rsquo;s domain from normal Boomrng screens.</span>
+          {/* Locked copy, BOOMRNG-V2-DESIGN-SPEC.md §26: "That second
+              sentence is not legal boilerplate — it's the single most
+              important line of copy in this whole feature." Must not be
+              paraphrased. */}
+          <span className={styles.toggleHint}>
+            Hides the domain in Boomrng&rsquo;s own screens until you unlock it with your PIN. Not encrypted.
+          </span>
         </span>
       </label>
+
+      {isPrivate && !pinConfigured && (
+        <span className={styles.warning}>
+          You haven&rsquo;t set a PIN yet — this will stay masked, but anyone can unlock it without one. Set a PIN in{' '}
+          <button type="button" className={styles.warningAction} onClick={onNavigateToSettings}>
+            Settings
+          </button>
+          .
+        </span>
+      )}
 
       <div className={styles.field}>
         <span className={styles.label}>Behavior</span>
@@ -227,10 +243,11 @@ export const ConstraintForm: React.FC<ConstraintFormProps> = ({
                     )}
                     {b.value === 'pin-required' && !pinConfigured && (
                       <span className={styles.warning}>
-                        No PIN set.{' '}
+                        You haven&rsquo;t set a PIN yet — set one in{' '}
                         <button type="button" className={styles.warningAction} onClick={onNavigateToSettings}>
-                          Set PIN
-                        </button>
+                          Settings
+                        </button>{' '}
+                        first.
                       </span>
                     )}
                   </span>
