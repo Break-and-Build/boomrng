@@ -1,4 +1,4 @@
-import { getDomain, goBackToOriginal, goBackOrToOriginal, requestContinuation } from '../shared/utils';
+import { getDomain, goBackToOriginal, goBackOrToOriginal, requestContinuation, reconcileStaleEnforcementPage } from '../shared/utils';
 import { loadEnforcementContext } from '../../shared/services';
 import { buildCheckpointView } from './checkpoint-view';
 
@@ -70,6 +70,8 @@ document.addEventListener('keydown', (event) => {
 
 async function init(): Promise<void> {
   const { constraint } = await loadEnforcementContext(domain);
+  if (reconcileStaleEnforcementPage(constraint)) return;
+
   const view = buildCheckpointView(domain, constraint);
 
   if (headlineEl) headlineEl.textContent = view.headline;

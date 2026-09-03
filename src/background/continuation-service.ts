@@ -1,5 +1,10 @@
 import { normalizeDomain } from '../shared/utils/domain';
 import { buildBlockedSiteRegexFilter } from './rules-builder';
+import { loadConstraints } from '../shared/storage/storage-service';
+import { findMatchingConstraint } from '../shared/services/enforcement-context-service';
+import type { ConstraintBehavior } from '../shared/types/constraint';
+import { consumePinAuthorization } from './pin-authorization-service';
+import { isDelayWindowElapsed } from './delay-authority-service';
 
 /**
  * Grants a single, deliberately narrow, temporary exception to an active
@@ -17,7 +22,35 @@ import { buildBlockedSiteRegexFilter } from './rules-builder';
  * tab, and never written to `chrome.storage` (so it cannot outlive the
  * browser session even in the worst case, and never becomes a de facto
  * permanent exemption field on `Constraint`).
+ *
+ * **Security boundary, added after a confirmed real-Chrome bypass.**
+ * Every enforcement page is a `web_accessible_resource` matched against
+ * `<all_urls>` (manifest.json) — a user can navigate directly to
+ * Checkpoint's own page with an arbitrary `?domain=`, and Checkpoint's
+ * Continue button is unconditional (no PIN, no timer). Before this
+ * change, `grantContinuation` trusted whatever domain string the calling
+ * page supplied and granted a same-tab session `allow` rule for it
+ * outright — which meant Checkpoint's own always-available Continue
+ * button could be used to obtain a grant for a domain configured as
+ * Hard Block (or any other domain, constrained or not), fully bypassing
+ * it. UI gating (a hidden Continue button, a PIN form, a countdown) is
+ * not an authorization boundary — any of it is reachable by simply
+ * loading the page directly. The background is now the sole source of
+ * truth: `grantContinuation` independently loads the live constraint
+ * list and refuses to grant unless a *current* constraint exists for
+ * the *exact* requested domain (§30.2's canonical `normalizeDomain()`
+ * identity — the same match `findMatchingConstraint()` already uses for
+ * every enforcement page's own live-context resolution, not a second,
+ * differently-scoped domain parser) whose behavior is one of the three
+ * that legitimately end in a continuation request. Hard Block is
+ * deliberately absent from that set — there is no code path, no matter
+ * which page originates the request, that can produce a grant for it.
  */
+const CONTINUATION_ELIGIBLE_BEHAVIORS: ReadonlySet<ConstraintBehavior> = new Set<ConstraintBehavior>([
+  'checkpoint',
+  'delay',
+  'pin-required',
+]);
 
 /**
  * Reserved rule-ID range for continuation grants, kept far above the
@@ -101,6 +134,18 @@ export interface GrantContinuationResult {
  * the identical rule ID and restarts its cleanup timers rather than
  * accumulating a second rule — there is only ever at most one
  * continuation rule per tab.
+ *
+ * Fails closed: format validation first (cheap, synchronous), then the
+ * live-constraint authorization check below — a request only proceeds to
+ * actually install a DNR rule once a *current* constraint for this exact
+ * domain is found with a continuation-eligible behavior. Every other
+ * outcome (no matching constraint at all, or a matching constraint whose
+ * behavior isn't in `CONTINUATION_ELIGIBLE_BEHAVIORS` — most importantly
+ * `hard-block`) is denied identically to any other failure the caller
+ * already handles (`{ success: false }`) — enforcement pages only ever
+ * branch on `.success`, never inspect `.error`, so there is nothing
+ * page-visible to distinguish "wrong domain" from "not eligible" from
+ * "DNR call failed", by design.
  */
 export async function grantContinuation({ domain, tabId }: GrantContinuationRequest): Promise<GrantContinuationResult> {
   const host = normalizeDomain(domain);
@@ -109,6 +154,33 @@ export async function grantContinuation({ domain, tabId }: GrantContinuationRequ
   }
   if (!Number.isInteger(tabId) || tabId < 0) {
     return { success: false, error: 'Invalid tab' };
+  }
+
+  const constraints = await loadConstraints();
+  const constraint = findMatchingConstraint(host, constraints);
+  if (!constraint || !CONTINUATION_ELIGIBLE_BEHAVIORS.has(constraint.behavior)) {
+    return { success: false, error: 'Continuation not authorized for this domain' };
+  }
+
+  // Behavior-category eligibility alone is not the full prerequisite —
+  // Checkpoint has none beyond this (intentionally ungated, §12), but
+  // pin-required and delay each have their own gate that must be
+  // independently, freshly satisfied for *this* request. Re-checking the
+  // live constraint above already handles deletion/behavior-change/
+  // recreation; these two checks close the remaining, previously-
+  // confirmed self-bypass: a page could call REQUEST_CONTINUE directly
+  // for a live pin-required or delay domain without ever entering a PIN
+  // or waiting, since only the behavior category was checked.
+  if (constraint.behavior === 'pin-required') {
+    const authorized = consumePinAuthorization(tabId, host, constraint.id);
+    if (!authorized) {
+      return { success: false, error: 'Continuation not authorized for this domain' };
+    }
+  } else if (constraint.behavior === 'delay') {
+    const elapsed = await isDelayWindowElapsed(host, constraint);
+    if (!elapsed) {
+      return { success: false, error: 'Continuation not authorized for this domain' };
+    }
   }
 
   const ruleId = continuationRuleId(tabId);

@@ -1,4 +1,6 @@
 import { validateUrl } from '../../shared/services/validation-service';
+import { getEnforcementPagePath } from '../../shared/services/enforcement-context-service';
+import type { Constraint } from '../../shared/types/constraint';
 import type { MessageResponse } from '../../shared/types/messages';
 
 export function getUrlParam(name: string): string | null {
@@ -147,4 +149,74 @@ export function goBackOrToOriginal(): void {
       }
     }
   }, 150);
+}
+
+/**
+ * Called once, before an enforcement page's own `init()` does anything
+ * else — detects whether this page still matches the LIVE constraint's
+ * *current* behavior, which is only guaranteed true at the moment DNR
+ * first redirected here. A plain refresh, a second tab reusing a
+ * since-stale page, or simply leaving the page open while the constraint
+ * is edited elsewhere never re-runs DNR (the extension's own
+ * `chrome-extension://` URL never matches a block/redirect rule's
+ * condition), so nothing else forces a transition on its own
+ * (BOOMRNG-V2-DESIGN-SPEC.md §30.9, confirmed real-Chrome bug).
+ *
+ * Purely a UI/routing concern, not an authorization boundary — the
+ * background's own continuation checks (`continuation-service.ts`)
+ * already independently re-validate the live constraint on every
+ * `REQUEST_CONTINUE`/`GET_DELAY_WINDOW` regardless of what any page
+ * displays, so a stale page could only ever show a *misleading* UI
+ * (a phantom Delay countdown, a stale Continue button), never actually
+ * grant anything a fresh check wouldn't. A misleading UI is still a
+ * real bug, so this exists — but it deliberately does not duplicate any
+ * authorization decision, only where the page itself should be.
+ *
+ * Reuses `getEnforcementPagePath()` — the exact same behavior→page
+ * mapping `rules-builder.ts` uses to pick a DNR redirect target — so
+ * "where should a fresh request for this behavior land" and "where
+ * should a stale page for this behavior converge" can never disagree.
+ * `window.location.replace()` (not `.href =`) so a chain of corrections
+ * never grows the tab's back-history — and cannot loop: the destination
+ * page runs this exact same check against the same live constraint on
+ * its own load, and by construction its own current path is the
+ * canonical one for that constraint, so it always finds itself already
+ * correct and stops there.
+ *
+ * `behavior` is not read back by anything (BOOMRNG-V2-DESIGN-SPEC.md
+ * §30.9: query params are never authoritative) — it's included on the
+ * rebuilt URL only to keep the same shape `rules-builder.ts` produces.
+ *
+ * Returns `true` if this function already navigated the page away (the
+ * caller must stop its own `init()` immediately without doing anything
+ * else); `false` if the live behavior matches this page and normal
+ * initialization should proceed.
+ */
+export function reconcileStaleEnforcementPage(constraint: Constraint | null): boolean {
+  if (!constraint) {
+    // No live constraint for this domain at all anymore (deleted through
+    // Settings/Sites, a deliberate action — not the narrow mid-redirect
+    // race the "missing constraint" display fallback elsewhere in each
+    // page's own view-building exists for). Nothing left to enforce:
+    // behave exactly like "Continue"/"Back to what I was doing" rather
+    // than presenting stale enforcement UI for a constraint that no
+    // longer exists.
+    goBackToOriginal();
+    return true;
+  }
+
+  const canonicalPath = getEnforcementPagePath(constraint.behavior);
+  const currentPath = window.location.pathname.replace(/^\/+/, '');
+  if (currentPath === `dist/${canonicalPath}`) {
+    return false;
+  }
+
+  const original = getOriginalUrlFromHash();
+  const domain = getDomain();
+  const target = new URL(`chrome-extension://${chrome.runtime.id}/dist/${canonicalPath}`);
+  if (domain) target.searchParams.set('domain', domain);
+  target.searchParams.set('behavior', constraint.behavior);
+
+  window.location.replace(original ? `${target.toString()}#${original}` : target.toString());
+  return true;
 }

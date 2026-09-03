@@ -1,11 +1,11 @@
 /**
  * A minimal in-memory `chrome.*` mock for tests — the repository has no
  * real Chrome available under `vitest`, and the storage/DNR-adjacent
- * services under test call `chrome.storage.local` and reference
- * `chrome.declarativeNetRequest`'s enum constants directly. This is not a
- * faithful DNR implementation (it can't verify an actual browser redirect
- * happens) — it exists only so pure logic that reads/writes
- * `chrome.storage.local` or reads the two enum values `rules-builder.ts`
+ * services under test call `chrome.storage.local`/`chrome.storage.session`
+ * and reference `chrome.declarativeNetRequest`'s enum constants directly.
+ * This is not a faithful DNR implementation (it can't verify an actual
+ * browser redirect happens) — it exists only so pure logic that reads/
+ * writes `chrome.storage.*` or reads the two enum values `rules-builder.ts`
  * embeds in its output can run and be asserted against.
  */
 
@@ -37,19 +37,16 @@ interface MockAlarm {
 
 export interface ChromeMockHandle {
   store: StorageArea;
+  /** Backing object for `chrome.storage.session` — separate from `store` (`chrome.storage.local`), same shape, since the two are genuinely distinct areas in real Chrome (`delay-authority-service.ts` deliberately uses `.session`, not `.local`). */
+  sessionStore: StorageArea;
   /** Live view of the mock's current session rules — inspect directly rather than via an async getSessionRules() round-trip in tests. */
   sessionRules: Map<number, MockRule>;
   /** Live view of the mock's current alarms, keyed by name. */
   alarms: Map<string, MockAlarm>;
 }
 
-export function installChromeMock(initial: StorageArea = {}): ChromeMockHandle {
-  const store: StorageArea = { ...initial };
-  const listeners: ChangeListener[] = [];
-  const sessionRules = new Map<number, MockRule>();
-  const alarms = new Map<string, MockAlarm>();
-
-  const local = {
+function makeStorageArea(store: StorageArea, listeners: ChangeListener[], areaName: string) {
+  return {
     get(keys?: string | string[] | null): Promise<StorageArea> {
       return new Promise((resolve) => {
         if (keys === undefined || keys === null) {
@@ -70,17 +67,42 @@ export function installChromeMock(initial: StorageArea = {}): ChromeMockHandle {
           const oldValue = store[key];
           store[key] = value;
           for (const listener of listeners) {
-            listener({ [key]: { oldValue, newValue: value } }, 'local');
+            listener({ [key]: { oldValue, newValue: value } }, areaName);
+          }
+        }
+        resolve();
+      });
+    },
+    remove(keys: string | string[]): Promise<void> {
+      return new Promise((resolve) => {
+        for (const key of Array.isArray(keys) ? keys : [keys]) {
+          if (!(key in store)) continue;
+          const oldValue = store[key];
+          delete store[key];
+          for (const listener of listeners) {
+            listener({ [key]: { oldValue, newValue: undefined } }, areaName);
           }
         }
         resolve();
       });
     },
   };
+}
+
+export function installChromeMock(initial: StorageArea = {}): ChromeMockHandle {
+  const store: StorageArea = { ...initial };
+  const sessionStore: StorageArea = {};
+  const listeners: ChangeListener[] = [];
+  const sessionRules = new Map<number, MockRule>();
+  const alarms = new Map<string, MockAlarm>();
+
+  const local = makeStorageArea(store, listeners, 'local');
+  const session = makeStorageArea(sessionStore, listeners, 'session');
 
   const chromeMock = {
     storage: {
       local,
+      session,
       onChanged: {
         addListener(fn: ChangeListener) {
           listeners.push(fn);
@@ -139,7 +161,7 @@ export function installChromeMock(initial: StorageArea = {}): ChromeMockHandle {
 
   (globalThis as unknown as { chrome: unknown }).chrome = chromeMock;
 
-  return { store, sessionRules, alarms };
+  return { store, sessionStore, sessionRules, alarms };
 }
 
 export function uninstallChromeMock(): void {

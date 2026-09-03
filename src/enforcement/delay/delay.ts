@@ -1,13 +1,7 @@
-import { getDomain, goBackToOriginal, goBackOrToOriginal, requestContinuation } from '../shared/utils';
+import { getDomain, goBackToOriginal, goBackOrToOriginal, requestContinuation, sendMessage, reconcileStaleEnforcementPage } from '../shared/utils';
 import { loadEnforcementContext } from '../../shared/services';
-import {
-  resolveDelayMinutes,
-  getRemainingMs,
-  buildDelayView,
-  parseStoredDelayState,
-  resolveDelayTiming,
-  type StoredDelayState,
-} from './delay-view';
+import { getRemainingMs, buildDelayView } from './delay-view';
+import type { MessageResponse } from '../../shared/types/messages';
 
 const pageEl = document.getElementById('page');
 const domainChipEl = document.getElementById('domain');
@@ -20,41 +14,30 @@ const errorEl = document.getElementById('error');
 
 const domain = getDomain();
 
-// Absolute end-time persistence, keyed per domain — the storage
-// mechanism itself is unchanged from the pre-V2 implementation
-// (BOOMRNG-V2-DESIGN-SPEC.md §13: "keep the existing, already-correct
-// pattern... should not be touched beyond adapting it to the new visual
-// treatment"). Storing an absolute timestamp rather than a
-// remaining-seconds counter is what makes the countdown immune to
-// setInterval drift/throttling and correct across a refresh: every tick,
-// running or not, re-derives "how much time is left" from `Date.now()`
-// against this fixed point, never from decrementing anything.
-//
-// What DID need fixing: the stored value used to be a bare number with
-// no record of which constraint it belonged to. Real-Chrome QA found
-// that a domain-only key lets a stale, unrelated window (from a since
-// -deleted/-edited constraint) survive and get silently reused by a
-// logically new constraint for the same domain. The stored shape is now
-// `StoredDelayState` (endTime + constraintId + the duration that endTime
-// was actually computed against) — see `resolveDelayTiming()` /
-// `isStoredStateUsable()` in delay-view.ts for the ownership check itself.
-const STORAGE_KEY = 'boomrng_delay_ends';
 const RING_RADIUS = 48;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
-function getDelayStorageKey(): string {
-  return domain ? `${STORAGE_KEY}_${domain}` : STORAGE_KEY;
-}
-
-async function getStoredDelayState(): Promise<StoredDelayState | null> {
-  const key = getDelayStorageKey();
-  const data = await chrome.storage.local.get(key);
-  return parseStoredDelayState(data[key]);
-}
-
-async function setStoredDelayState(state: StoredDelayState): Promise<void> {
-  const key = getDelayStorageKey();
-  await chrome.storage.local.set({ [key]: state });
+/**
+ * The authoritative window (endTime, totalMs) is now owned entirely by
+ * the background (`delay-authority-service.ts`) — this page only
+ * displays it. Before the PIN/Delay authorization security fix, this
+ * page computed and wrote `boomrng_delay_ends_<domain>` in
+ * `chrome.storage.local` itself, which meant the value `REQUEST_CONTINUE`
+ * would eventually need to trust was directly page-writable (forgeable
+ * via DevTools, no waiting required). Asking the background for the
+ * window — which independently re-derives it from the live constraint
+ * and its own storage — means this page's own state can no longer
+ * influence whether continuation is actually granted; it can only ask
+ * to see it. `REQUEST_CONTINUE` for a delay-behavior constraint
+ * re-resolves this exact same window server-side rather than trusting
+ * anything from this page.
+ */
+async function getDelayWindow(): Promise<{ endTime: number; totalMs: number } | null> {
+  const response = (await sendMessage({ type: 'GET_DELAY_WINDOW', domain })) as MessageResponse | null;
+  if (response?.success !== true) return null;
+  const data = response.data as { endTime?: number; totalMs?: number } | undefined;
+  if (typeof data?.endTime !== 'number' || typeof data?.totalMs !== 'number') return null;
+  return { endTime: data.endTime, totalMs: data.totalMs };
 }
 
 let continueRequestInFlight = false;
@@ -112,22 +95,19 @@ document.addEventListener('keydown', (event) => {
 
 async function init(): Promise<void> {
   const { constraint } = await loadEnforcementContext(domain);
-  const delayMinutes = resolveDelayMinutes(constraint);
-  const constraintId = constraint?.id ?? null;
+  if (reconcileStaleEnforcementPage(constraint)) return;
 
-  const now = Date.now();
-  const stored = await getStoredDelayState();
-  const timing = resolveDelayTiming(stored, constraintId, delayMinutes, now);
-  const { endTime, totalMs } = timing;
+  // Reconciliation above already confirmed the live constraint is a
+  // genuine, matching `delay` behavior — so by the time GET_DELAY_WINDOW
+  // is asked, this can no longer be "stale page, wrong live behavior"
+  // (the background independently fails closed on that too, see
+  // delay-authority-service.ts). The fallback below is reachable only
+  // for a genuine transient message failure on an already-confirmed
+  // delay domain, never as a substitute for a real window.
+  const delayWindow = await getDelayWindow();
 
-  // Only persist when there's an actual constraint to own this window —
-  // the missing-constraint fallback (deleted/edited race, same precedent
-  // as Checkpoint) computes a display-only value each load rather than
-  // writing something that could never be reconciled back to a real
-  // constraint later.
-  if (!timing.reused && constraintId) {
-    await setStoredDelayState({ endTime, constraintId, delayMinutes });
-  }
+  const endTime = delayWindow?.endTime ?? Date.now() + 15 * 60_000;
+  const totalMs = delayWindow?.totalMs ?? 15 * 60_000;
 
   const isPrivate = constraint?.isPrivate ?? false;
   if (domain && !isPrivate && domainChipEl) {

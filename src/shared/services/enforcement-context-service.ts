@@ -1,4 +1,4 @@
-import type { Constraint } from '../types/constraint';
+import type { Constraint, ConstraintBehavior } from '../types/constraint';
 import type { Settings } from '../types/settings';
 import { normalizeDomain } from '../utils/domain';
 import { loadConstraints, loadSettings } from '../storage/storage-service';
@@ -29,6 +29,38 @@ export function findMatchingConstraint(domain: string | null, constraints: Const
   if (!normalizedTarget) return null;
 
   return constraints.find((c) => normalizeDomain(c.domain) === normalizedTarget) ?? null;
+}
+
+/**
+ * The single canonical mapping from a constraint's live `behavior` to the
+ * enforcement page it belongs on — the same collapsing `rules-builder.ts`
+ * uses to pick a DNR redirect target (legacy `reflection`/`custom-message`
+ * /`scheduled` collapse onto Checkpoint's page, `progressive-delay` onto
+ * Delay's), now shared rather than duplicated, so a page can also use it
+ * to detect it has gone stale relative to the *current* live constraint
+ * (BOOMRNG-V2-DESIGN-SPEC.md §30.9 — a plain refresh, or simply leaving a
+ * page open while its constraint is edited elsewhere, never re-runs DNR:
+ * the extension's own `chrome-extension://` URL never matches a block/
+ * redirect rule's condition, so nothing forces a transition on its own).
+ * An unrecognized/missing behavior falls back to Hard Block's page — the
+ * same fail-safe default `rules-builder.ts`'s own switch already used.
+ */
+export function getEnforcementPagePath(behavior: ConstraintBehavior): string {
+  switch (behavior) {
+    case 'checkpoint':
+    case 'reflection':
+    case 'custom-message':
+    case 'scheduled':
+      return 'src/enforcement/checkpoint/index.html';
+    case 'delay':
+    case 'progressive-delay':
+      return 'src/enforcement/delay/index.html';
+    case 'pin-required':
+      return 'src/enforcement/pin/index.html';
+    case 'hard-block':
+    default:
+      return 'src/enforcement/block/index.html';
+  }
 }
 
 export async function loadEnforcementContext(domain: string | null): Promise<EnforcementContext> {

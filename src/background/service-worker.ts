@@ -3,6 +3,8 @@ import { loadSettings, loadConstraints } from '../shared/storage/storage-service
 import type { Constraint } from '../shared/types';
 import { shouldExcludeTabFromBudget } from '../shared/utils/tabs';
 import { verifyPin } from '../shared/services/pin-service';
+import { findMatchingConstraint } from '../shared/services/enforcement-context-service';
+import { normalizeDomain } from '../shared/utils/domain';
 import {
   grantContinuation,
   handleNavigationComplete,
@@ -11,6 +13,8 @@ import {
   isContinuationAlarm,
   tabIdFromContinuationAlarm,
 } from './continuation-service';
+import { clearPinAuthorization, mintPinAuthorization } from './pin-authorization-service';
+import { resolveDelayWindow, pruneStaleDelayAuthorities } from './delay-authority-service';
 
 let ruleRefreshInFlight: Promise<void> | null = null;
 let ruleRefreshQueued = false;
@@ -156,9 +160,56 @@ async function refreshEnforcementRules(): Promise<void> {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'VALIDATE_PIN') {
-    loadSettings().then((settings) => {
+    // The tab is read from `sender`, never the message body — same rule
+    // as REQUEST_CONTINUE below. A PIN authorization is minted (or
+    // withheld) for *this* tab only.
+    const tabId = sender.tab?.id;
+    if (tabId !== undefined) {
+      // Any fresh attempt — right or wrong, eligible domain or not —
+      // invalidates whatever authorization was already pending for this
+      // tab (BOOMRNG-V2-DESIGN-SPEC.md security fix: a wrong PIN must
+      // never leave an earlier success's authorization usable).
+      clearPinAuthorization(tabId);
+    }
+
+    const host = normalizeDomain(message.domain);
+
+    Promise.all([loadConstraints(), loadSettings()]).then(([constraints, settings]) => {
+      const constraint = host ? findMatchingConstraint(host, constraints) : null;
+
+      // Fail closed before ever comparing the candidate: a domain that
+      // isn't a live pin-required constraint right now has nothing
+      // legitimate a PIN check could authorize, and must not be usable
+      // as an oracle for "is this the device's PIN" against arbitrary
+      // domains (unconstrained, checkpoint, delay, or hard-block).
+      if (tabId === undefined || !host || !constraint || constraint.behavior !== 'pin-required') {
+        sendResponse({ success: true, data: { valid: false } });
+        return;
+      }
+
       const isValid = verifyPin(message.pin, settings.pin);
+      if (isValid) {
+        mintPinAuthorization(tabId, host, constraint.id);
+      }
       sendResponse({ success: true, data: { valid: isValid } });
+    });
+    return true;
+  }
+
+  if (message.type === 'GET_DELAY_WINDOW') {
+    const host = normalizeDomain(message.domain);
+    if (!host) {
+      sendResponse({ success: false, error: 'Invalid domain' });
+      return false;
+    }
+    loadConstraints().then(async (constraints) => {
+      const constraint = findMatchingConstraint(host, constraints);
+      const window = await resolveDelayWindow(host, constraint);
+      if (!window) {
+        sendResponse({ success: false, error: 'No active delay constraint for this domain' });
+        return;
+      }
+      sendResponse({ success: true, data: window });
     });
     return true;
   }
@@ -184,6 +235,13 @@ chrome.storage.onChanged.addListener((_changes, namespace) => {
     });
     updateBadge().catch((error) => {
       console.error('[boomrng] Failed to update badge:', error);
+    });
+    // Every constraint edit is exactly the moment a Delay authority can
+    // become stale (behavior left `delay`, the constraint was deleted, or
+    // it was recreated with a new id) — see pruneStaleDelayAuthorities's
+    // own doc comment for the confirmed real-Chrome bug this closes.
+    loadConstraints().then(pruneStaleDelayAuthorities).catch((error) => {
+      console.error('[boomrng] Failed to prune stale delay authorities:', error);
     });
   }
 });

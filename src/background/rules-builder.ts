@@ -1,5 +1,6 @@
 import type { ConstraintBehavior } from '../shared/types/constraint';
 import { normalizeDomain } from '../shared/utils/domain';
+import { getEnforcementPagePath } from '../shared/services/enforcement-context-service';
 
 interface BlockedSite {
   url: string;
@@ -40,26 +41,6 @@ function normalizeSitePattern(siteInput: string): string | null {
     return `||${host}${path}${search}`;
   } catch {
     return null;
-  }
-}
-
-function getBehaviorPagePath(behavior: ConstraintBehavior): string {
-  switch (behavior) {
-    case 'checkpoint':
-      return 'src/enforcement/checkpoint/index.html';
-    case 'delay':
-    case 'progressive-delay':
-      return 'src/enforcement/delay/index.html';
-    case 'hard-block':
-      return 'src/enforcement/block/index.html';
-    case 'pin-required':
-      return 'src/enforcement/pin/index.html';
-    case 'reflection':
-    case 'custom-message':
-    case 'scheduled':
-      return 'src/enforcement/checkpoint/index.html';
-    default:
-      return 'src/enforcement/block/index.html';
   }
 }
 
@@ -155,7 +136,7 @@ export function generateRules(
   }
 
   for (const [, { host, behavior }] of blockedByBehavior) {
-    const pagePath = getBehaviorPagePath(behavior);
+    const pagePath = getEnforcementPagePath(behavior);
 
     rules.push({
       id: idCounter++,

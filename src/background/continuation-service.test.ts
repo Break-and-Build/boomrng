@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { installChromeMock, uninstallChromeMock, type ChromeMockHandle } from '../shared/testing/chrome-mock';
 import { buildBlockedSiteRegexFilter } from './rules-builder';
+import type { Constraint, ConstraintBehavior } from '../shared/types/constraint';
 import {
   grantContinuation,
   revokeContinuation,
@@ -12,6 +13,8 @@ import {
   CONTINUATION_RULE_ID_BASE,
   CONTINUATION_PRIORITY,
 } from './continuation-service';
+import { mintPinAuthorization, clearPinAuthorization } from './pin-authorization-service';
+import { resolveDelayWindow, pruneStaleDelayAuthorities } from './delay-authority-service';
 
 /**
  * IMPORTANT SCOPE NOTE, per the review requirements: these are unit-level
@@ -27,11 +30,42 @@ import {
  * report accompanying this change).
  */
 
+function makeConstraint(domain: string, behavior: ConstraintBehavior, overrides: Partial<Constraint> = {}): Constraint {
+  return {
+    id: `c-${domain}`,
+    domain,
+    behavior,
+    delayMinutes: behavior === 'delay' ? 15 : null,
+    schedule: null,
+    customMessage: null,
+    createdAt: Date.now(),
+    progressiveDelay: null,
+    isPrivate: false,
+    ...overrides,
+  };
+}
+
 let mock: ChromeMockHandle;
 
 beforeEach(() => {
   vi.useFakeTimers();
-  mock = installChromeMock();
+  // Every pre-existing test in this file exercises rule
+  // construction/cleanup/idempotency mechanics, not authorization — so
+  // the domains they already use are seeded here as ordinary, eligible
+  // (`checkpoint`) live constraints, once, rather than repeating the
+  // same setup in each test. The authorization boundary itself (denying
+  // Hard Block, unconstrained domains, ineligible behaviors) is covered
+  // by its own dedicated `describe` block below, which seeds its own,
+  // deliberately different constraints per case.
+  mock = installChromeMock({
+    constraints: [
+      makeConstraint('facebook.com', 'checkpoint'),
+      makeConstraint('a.com', 'checkpoint'),
+      makeConstraint('b.com', 'checkpoint'),
+      makeConstraint('reddit.com', 'checkpoint'),
+    ],
+    settings: { pin: null, tabBudget: 10, landingPage: '', allowedSites: [], schemaVersion: 1 },
+  });
 });
 
 afterEach(() => {
@@ -333,14 +367,19 @@ describe('cleanup — alarm backstop', () => {
 
 describe('no persistent state — approved architecture decision 6', () => {
   it('granting, cleaning up, and re-granting never writes anything to chrome.storage', async () => {
+    // Snapshot before: the authorization check (added after the URL-bypass
+    // security fix) now legitimately *reads* `constraints`/`settings` via
+    // `loadConstraints()`, so the mock's store is no longer empty at rest —
+    // this test's actual invariant is that the continuation flow never
+    // *writes* a new key, not that the store is empty.
+    const keysBefore = Object.keys(mock.store).sort();
+
     await grantContinuation({ domain: 'facebook.com', tabId: 5 });
     await handleNavigationComplete(5);
     await grantContinuation({ domain: 'facebook.com', tabId: 5 });
     await handleTabRemoved(5);
 
-    // The mock's storage area is only ever touched by chrome.storage.local
-    // get/set — nothing in this whole flow should have added a key.
-    expect(Object.keys(mock.store)).toHaveLength(0);
+    expect(Object.keys(mock.store).sort()).toEqual(keysBefore);
   });
 
 });
@@ -354,5 +393,591 @@ describe('revokeContinuation — idempotent revoke', () => {
     await grantContinuation({ domain: 'facebook.com', tabId: 5 });
     await revokeContinuation(5);
     await expect(revokeContinuation(5)).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * REGRESSION SUITE for the confirmed real-Chrome URL-bypass security
+ * defect: `grantContinuation` used to trust any syntactically valid
+ * domain string supplied by the calling page, with no check that a live
+ * constraint existed or what its behavior was. Checkpoint's Continue
+ * button requires no credential and no timer, so navigating directly to
+ * Checkpoint's own extension page with `?domain=<hard-blocked-domain>`
+ * obtained a same-tab session `allow` rule (priority 3) that outranked
+ * Hard Block's own persistent redirect rule (priority 1) — a full,
+ * one-click bypass of a constraint whose entire product promise is that
+ * no such bypass exists (§15). These tests pin the fix: the background
+ * is the sole authority on whether a grant may be created at all, using
+ * live `chrome.storage` constraint state — never the calling page's own
+ * UI state, which is trivially reachable directly and unconditionally.
+ */
+describe('grantContinuation — authorization boundary (security fix)', () => {
+  it('SECURITY: denies continuation for a Hard Block constraint — the exact confirmed bypass', async () => {
+    mock.store.constraints = [makeConstraint('example.com', 'hard-block')];
+
+    const result = await grantContinuation({ domain: 'example.com', tabId: 7 });
+
+    expect(result.success).toBe(false);
+    expect(mock.sessionRules.has(CONTINUATION_RULE_ID_BASE + 7)).toBe(false);
+  });
+
+  it('SECURITY: denies continuation for a Hard Block constraint even when the request targets a subdomain of it', async () => {
+    mock.store.constraints = [makeConstraint('example.com', 'hard-block')];
+
+    const result = await grantContinuation({ domain: 'sub.example.com', tabId: 7 });
+
+    // 'sub.example.com' does not exact-normalize to 'example.com'
+    // (see the domain-matching describe block below for why exact
+    // matching was chosen), so this denies via "no matching constraint"
+    // rather than "matched, but ineligible" — either reason is a safe
+    // denial, and the important, tested outcome is that no rule is ever
+    // created for a Hard Block-protected domain family.
+    expect(result.success).toBe(false);
+    expect(mock.sessionRules.has(CONTINUATION_RULE_ID_BASE + 7)).toBe(false);
+  });
+
+  it('SECURITY: denies continuation for a domain with no live constraint at all (arbitrary/unconstrained domain)', async () => {
+    mock.store.constraints = [];
+
+    const result = await grantContinuation({ domain: 'totally-unconstrained.com', tabId: 7 });
+
+    expect(result.success).toBe(false);
+    expect(mock.sessionRules.size).toBe(0);
+  });
+
+  it('SECURITY: a live constraint for domain A cannot be used to authorize a grant for domain B', async () => {
+    mock.store.constraints = [makeConstraint('allowed-checkpoint.com', 'checkpoint')];
+
+    const result = await grantContinuation({ domain: 'not-in-storage-at-all.com', tabId: 7 });
+
+    expect(result.success).toBe(false);
+    expect(mock.sessionRules.size).toBe(0);
+  });
+
+  it('allows continuation for a live checkpoint constraint', async () => {
+    mock.store.constraints = [makeConstraint('example.com', 'checkpoint')];
+    const result = await grantContinuation({ domain: 'example.com', tabId: 7 });
+    expect(result.success).toBe(true);
+    expect(mock.sessionRules.has(CONTINUATION_RULE_ID_BASE + 7)).toBe(true);
+  });
+
+  it('allows continuation for a live delay constraint once its authoritative window has elapsed', async () => {
+    const constraint = makeConstraint('delay-boundary-1.example', 'delay', { delayMinutes: 1 });
+    mock.store.constraints = [constraint];
+    // Establishes the real, private authoritative window via the same
+    // function GET_DELAY_WINDOW calls, then lets real (faked) time pass
+    // it — never seeded via any storage, since none is trusted anymore.
+    resolveDelayWindow('delay-boundary-1.example', constraint);
+    await vi.advanceTimersByTimeAsync(60_001);
+    const result = await grantContinuation({ domain: 'delay-boundary-1.example', tabId: 7 });
+    expect(result.success).toBe(true);
+    expect(mock.sessionRules.has(CONTINUATION_RULE_ID_BASE + 7)).toBe(true);
+  });
+
+  it('allows continuation for a live pin-required constraint once a matching PIN authorization was minted', async () => {
+    const constraint = makeConstraint('example.com', 'pin-required');
+    mock.store.constraints = [constraint];
+    mintPinAuthorization(7, 'example.com', constraint.id);
+    const result = await grantContinuation({ domain: 'example.com', tabId: 7 });
+    expect(result.success).toBe(true);
+    expect(mock.sessionRules.has(CONTINUATION_RULE_ID_BASE + 7)).toBe(true);
+  });
+
+  it('denies continuation for a legacy/non-V2 behavior not in the explicit eligible set (fail closed on anything not explicitly allow-listed)', async () => {
+    mock.store.constraints = [makeConstraint('example.com', 'progressive-delay')];
+    const result = await grantContinuation({ domain: 'example.com', tabId: 7 });
+    expect(result.success).toBe(false);
+    expect(mock.sessionRules.size).toBe(0);
+  });
+
+  it('denies continuation when the constraint list is completely empty', async () => {
+    mock.store.constraints = [];
+    const result = await grantContinuation({ domain: 'example.com', tabId: 7 });
+    expect(result.success).toBe(false);
+  });
+});
+
+/**
+ * DOMAIN-MATCHING SEMANTICS, documented explicitly per the review
+ * requirement: authorization reuses `findMatchingConstraint()` — the
+ * same *exact*-normalized-domain match every enforcement page already
+ * uses for its own live-context resolution (`enforcement-context-service.ts`),
+ * not a second, differently-scoped domain parser. This is a deliberate
+ * choice, not an oversight: tracing `rules-builder.ts`'s own redirect
+ * construction shows the `domain=` value an enforcement page ever
+ * legitimately receives is always the constraint's own exact stored
+ * (normalized) domain — a DNR rule is registered once per constraint
+ * and its `regexSubstitution` template always embeds that one fixed
+ * value, regardless of which subdomain of it actually matched the
+ * request. So exact matching never breaks a real flow, and — unlike the
+ * bidirectional subdomain-inclusive `isDomainMatch()` helper, which for
+ * two overlapping constraints (e.g. a Hard Block on `sub.example.com`
+ * and a separate Checkpoint on `example.com`) could match a request
+ * against the *wrong* one of the two depending on array order — exact
+ * matching has no such ambiguity. It is the more conservative, fail
+ * -closed choice for an authorization boundary specifically.
+ */
+describe('grantContinuation — domain matching semantics (documented decision)', () => {
+  it('a request for a bare domain matches a constraint stored for that exact domain', async () => {
+    mock.store.constraints = [makeConstraint('example.com', 'checkpoint')];
+    const result = await grantContinuation({ domain: 'example.com', tabId: 7 });
+    expect(result.success).toBe(true);
+  });
+
+  it('a request for a subdomain does NOT match a constraint stored for the bare parent domain — exact match only, not the block rule\'s own subdomain-inclusive regex', async () => {
+    mock.store.constraints = [makeConstraint('example.com', 'checkpoint')];
+    const result = await grantContinuation({ domain: 'sub.example.com', tabId: 7 });
+    expect(result.success).toBe(false);
+  });
+
+  it('a request for the bare domain does NOT match a constraint stored for a subdomain specifically', async () => {
+    mock.store.constraints = [makeConstraint('sub.example.com', 'checkpoint')];
+    const result = await grantContinuation({ domain: 'example.com', tabId: 7 });
+    expect(result.success).toBe(false);
+  });
+
+  it('matching is case-insensitive and www-normalized, same as normalizeDomain() everywhere else', async () => {
+    mock.store.constraints = [makeConstraint('example.com', 'checkpoint')];
+    expect((await grantContinuation({ domain: 'EXAMPLE.COM', tabId: 7 })).success).toBe(true);
+    expect((await grantContinuation({ domain: 'www.example.com', tabId: 7 })).success).toBe(true);
+  });
+});
+
+/**
+ * Establishes a real authoritative Delay window via the same function
+ * `GET_DELAY_WINDOW` calls (`resolveDelayWindow`, background-managed,
+ * `chrome.storage.session`-backed) and, unless `elapse` is false,
+ * advances the fake clock past it. Uses a 1-minute constraint duration
+ * throughout so "elapsed" only ever needs a single, cheap
+ * `advanceTimersByTime` step.
+ */
+async function establishDelayWindow(domain: string, constraint: Constraint, elapse: boolean): Promise<void> {
+  await resolveDelayWindow(domain, constraint);
+  if (elapse) {
+    vi.advanceTimersByTime((constraint.delayMinutes ?? 1) * 60_000 + 1);
+  }
+}
+
+/**
+ * PREVIOUSLY REPORTED GAP, NOW CLOSED. `grantContinuation` used to
+ * authorize a pin-required/delay grant purely by checking the live
+ * constraint's *behavior category* — never that the category's own
+ * specific precondition (a correct PIN just entered; the configured
+ * wait actually elapsed) was satisfied for *this* request. A user with
+ * DevTools open on any of this extension's own pages could call
+ * `chrome.runtime.sendMessage({type:'REQUEST_CONTINUE', domain:'<pin-or
+ * -delay-domain>'})` directly and succeed with neither precondition met.
+ *
+ * Fixed via two background-owned authorities, re-validated against live
+ * constraint data on every read — neither ever accepts a page-supplied
+ * timing/elapsed/PIN-result value *through the continuation API itself*:
+ * `pin-authorization-service.ts` (pure in-memory, one-shot, tab+domain
+ * +constraintId scoped — page-unforgeable, since a service worker's own
+ * JS memory has no chrome.storage-style API surface at all) and
+ * `delay-authority-service.ts` (`chrome.storage.session`-backed —
+ * background-managed, but NOT claimed unforgeable: like every
+ * chrome.storage area it is readable and writable by the extension's
+ * own pages by default, and a user who deliberately reverse-engineers
+ * and hand-writes the internal record via DevTools can force it; see
+ * test 16b below, an explicit, accepted threat-model boundary, not an
+ * oversight). Checkpoint is unaffected — it never had a precondition
+ * beyond "the domain is Checkpoint," which is already fully covered by
+ * the behavior-category check above.
+ */
+describe('grantContinuation — PIN authorization boundary (adversarial)', () => {
+  it('1. direct REQUEST_CONTINUE for a live pin-required constraint with no authorization minted → denied', async () => {
+    mock.store.constraints = [makeConstraint('instagram.com', 'pin-required')];
+    const result = await grantContinuation({ domain: 'instagram.com', tabId: 7 });
+    expect(result.success).toBe(false);
+    expect(mock.sessionRules.size).toBe(0);
+  });
+
+  it('2. a wrong PIN attempt (simulated: authorization explicitly cleared, none minted) then REQUEST_CONTINUE → denied', async () => {
+    const constraint = makeConstraint('instagram.com', 'pin-required');
+    mock.store.constraints = [constraint];
+    clearPinAuthorization(7); // exactly what the VALIDATE_PIN handler does on any attempt, right or wrong
+    const result = await grantContinuation({ domain: 'instagram.com', tabId: 7 });
+    expect(result.success).toBe(false);
+  });
+
+  it('3/4. a correct PIN (simulated by minting) → REQUEST_CONTINUE for the same tab/domain/constraint → allowed', async () => {
+    const constraint = makeConstraint('instagram.com', 'pin-required');
+    mock.store.constraints = [constraint];
+    mintPinAuthorization(7, 'instagram.com', constraint.id);
+    const result = await grantContinuation({ domain: 'instagram.com', tabId: 7 });
+    expect(result.success).toBe(true);
+  });
+
+  it('5. a consumed authorization cannot be reused — a second direct REQUEST_CONTINUE fails without re-verification', async () => {
+    const constraint = makeConstraint('instagram.com', 'pin-required');
+    mock.store.constraints = [constraint];
+    mintPinAuthorization(7, 'instagram.com', constraint.id);
+    expect((await grantContinuation({ domain: 'instagram.com', tabId: 7 })).success).toBe(true);
+    expect((await grantContinuation({ domain: 'instagram.com', tabId: 7 })).success).toBe(false);
+  });
+
+  it('6. an authorization minted for domain A cannot unlock domain B', async () => {
+    const constraintA = makeConstraint('a.com', 'pin-required');
+    const constraintB = makeConstraint('b.com', 'pin-required');
+    mock.store.constraints = [constraintA, constraintB];
+    mintPinAuthorization(7, 'a.com', constraintA.id);
+    const result = await grantContinuation({ domain: 'b.com', tabId: 7 });
+    expect(result.success).toBe(false);
+  });
+
+  it('7. an authorization minted for tab A cannot unlock tab B', async () => {
+    const constraint = makeConstraint('instagram.com', 'pin-required');
+    mock.store.constraints = [constraint];
+    mintPinAuthorization(7, 'instagram.com', constraint.id);
+    const result = await grantContinuation({ domain: 'instagram.com', tabId: 8 });
+    expect(result.success).toBe(false);
+  });
+
+  it('8. a PIN authorization cannot unlock a Delay constraint (different behavior, same domain)', async () => {
+    // The domain is pin-required live, but the authorization store is
+    // simply never consulted for a delay grant, and no delay window has
+    // ever been created — cross-behavior reuse has no code path at all.
+    const constraint = makeConstraint('instagram.com', 'delay', { delayMinutes: 15 });
+    mock.store.constraints = [constraint];
+    mintPinAuthorization(7, 'instagram.com', constraint.id);
+    const result = await grantContinuation({ domain: 'instagram.com', tabId: 7 });
+    expect(result.success).toBe(false);
+  });
+
+  it('9. constraint deleted after PIN success → denied (re-checked live at REQUEST_CONTINUE time)', async () => {
+    const constraint = makeConstraint('instagram.com', 'pin-required');
+    mock.store.constraints = [constraint];
+    mintPinAuthorization(7, 'instagram.com', constraint.id);
+    mock.store.constraints = []; // deleted before Continue is clicked
+    const result = await grantContinuation({ domain: 'instagram.com', tabId: 7 });
+    expect(result.success).toBe(false);
+  });
+
+  it('10. constraint changed to Hard Block after PIN success → denied', async () => {
+    const constraint = makeConstraint('instagram.com', 'pin-required');
+    mock.store.constraints = [constraint];
+    mintPinAuthorization(7, 'instagram.com', constraint.id);
+    mock.store.constraints = [{ ...constraint, behavior: 'hard-block' }];
+    const result = await grantContinuation({ domain: 'instagram.com', tabId: 7 });
+    expect(result.success).toBe(false);
+  });
+
+  it('11. constraint deleted and recreated with a different ID → stale authorization denied', async () => {
+    const original = makeConstraint('instagram.com', 'pin-required');
+    mock.store.constraints = [original];
+    mintPinAuthorization(7, 'instagram.com', original.id);
+    const recreated = makeConstraint('instagram.com', 'pin-required', { id: 'a-different-id' });
+    mock.store.constraints = [recreated];
+    const result = await grantContinuation({ domain: 'instagram.com', tabId: 7 });
+    expect(result.success).toBe(false);
+  });
+
+  it('12. an expired authorization is denied even for the exact right tab/domain/constraint', async () => {
+    const constraint = makeConstraint('instagram.com', 'pin-required');
+    mock.store.constraints = [constraint];
+    mintPinAuthorization(7, 'instagram.com', constraint.id);
+    await vi.advanceTimersByTimeAsync(11_000); // TTL is 10s
+    const result = await grantContinuation({ domain: 'instagram.com', tabId: 7 });
+    expect(result.success).toBe(false);
+  });
+
+  it('13. service-worker restart (simulated: the in-memory map is necessarily empty on a fresh module instance) denies a not-yet-consumed authorization — matches handleTabRemoved\'s own documented precedent of failing safe rather than trusting lost bookkeeping', async () => {
+    const constraint = makeConstraint('instagram.com', 'pin-required');
+    mock.store.constraints = [constraint];
+    // No mint call at all — the equivalent of a restart between a real
+    // mint and this request, from grantContinuation's point of view:
+    // nothing to find, deny.
+    const result = await grantContinuation({ domain: 'instagram.com', tabId: 7 });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('grantContinuation — Delay authorization boundary (adversarial)', () => {
+  it('14. direct REQUEST_CONTINUE before any delay window exists → denied (no authoritative window has ever been established)', async () => {
+    mock.store.constraints = [makeConstraint('delay-adv-14.example', 'delay', { delayMinutes: 15 })];
+    const result = await grantContinuation({ domain: 'delay-adv-14.example', tabId: 7 });
+    expect(result.success).toBe(false);
+    expect(mock.sessionRules.size).toBe(0);
+  });
+
+  it('15. direct REQUEST_CONTINUE before the authoritative endTime → denied', async () => {
+    const constraint = makeConstraint('delay-adv-15.example', 'delay', { delayMinutes: 15 });
+    mock.store.constraints = [constraint];
+    await establishDelayWindow('delay-adv-15.example', constraint, false);
+    const result = await grantContinuation({ domain: 'delay-adv-15.example', tabId: 7 });
+    expect(result.success).toBe(false);
+  });
+
+  it('16. a tampered page-owned chrome.storage.local timestamp cannot authorize — that storage is never read by authorization at all now', async () => {
+    const constraint = makeConstraint('delay-adv-16.example', 'delay', { delayMinutes: 15 });
+    mock.store.constraints = [constraint];
+    // The old, page-owned local key from before this authority moved to
+    // the background, set to an already-elapsed time — exactly what a
+    // DevTools user could still freely write via chrome.storage.local.set().
+    // Inert: authorization reads only the background-managed session key
+    // (`boomrng_delay_authority_<domain>`), never this one, and no
+    // authoritative window was ever established for this domain anyway.
+    mock.store['boomrng_delay_ends_delay-adv-16.example'] = { endTime: Date.now() - 1, constraintId: constraint.id, delayMinutes: 15 };
+    const result = await grantContinuation({ domain: 'delay-adv-16.example', tabId: 7 });
+    expect(result.success).toBe(false);
+  });
+
+  it('16b. ACCEPTED THREAT-MODEL LIMITATION, documented not disguised: a correctly-keyed, correctly-shaped, already-elapsed chrome.storage.session record IS honored', async () => {
+    // This is not a bug. BOOMRNG-V2-DESIGN-SPEC.md §30.8 and
+    // delay-authority-service.ts's own doc comment both say plainly:
+    // Delay's authoritative record lives in chrome.storage.session so a
+    // real, multi-minute wait survives ordinary MV3 service-worker
+    // suspension (an in-memory-only design was tried and reverted for
+    // exactly this reason — see the design history). The background
+    // never trusts anything a page sends *through the continuation API*
+    // (no endTime/elapsed/duration/constraintId-as-proof argument to
+    // REQUEST_CONTINUE exists), but chrome.storage.session is, like
+    // every chrome.storage area, readable *and writable* by the
+    // extension's own pages by default — a user who deliberately
+    // reverse-engineers Boomrng's internal key format
+    // (`boomrng_delay_authority_<domain>`) and record shape
+    // (`{endTime, constraintId, delayMinutes}`) and hand-writes a
+    // matching, already-elapsed record via DevTools can make the
+    // background believe the wait elapsed. This is treated as
+    // equivalent in effort/intent to disabling the extension outright,
+    // and is explicitly out of scope for Delay specifically — it does
+    // NOT weaken Hard Block, PIN, or arbitrary-domain authorization,
+    // all of which independently verify their own live prerequisite
+    // regardless of what's in chrome.storage (see the Hard Block and
+    // PIN describe blocks below and above).
+    const constraint = makeConstraint('delay-adv-16b.example', 'delay', { delayMinutes: 15 });
+    mock.store.constraints = [constraint];
+    mock.sessionStore['boomrng_delay_authority_delay-adv-16b.example'] = { endTime: Date.now() - 1, constraintId: constraint.id, delayMinutes: 15 };
+    const result = await grantContinuation({ domain: 'delay-adv-16b.example', tabId: 7 });
+    expect(result.success).toBe(true);
+  });
+
+  it('17. the authoritative window, once elapsed, allows continuation', async () => {
+    const constraint = makeConstraint('delay-adv-17.example', 'delay', { delayMinutes: 1 });
+    mock.store.constraints = [constraint];
+    await establishDelayWindow('delay-adv-17.example', constraint, true);
+    const result = await grantContinuation({ domain: 'delay-adv-17.example', tabId: 7 });
+    expect(result.success).toBe(true);
+  });
+
+  it('18. an elapsed window belonging to a different constraint ID is denied (wrong owner, same domain)', async () => {
+    const original = makeConstraint('delay-adv-18.example', 'delay', { id: 'orig-18', delayMinutes: 1 });
+    await establishDelayWindow('delay-adv-18.example', original, true); // elapsed, but owned by 'orig-18'
+    const different = makeConstraint('delay-adv-18.example', 'delay', { id: 'different-18', delayMinutes: 15 });
+    mock.store.constraints = [different];
+    const result = await grantContinuation({ domain: 'delay-adv-18.example', tabId: 7 });
+    expect(result.success).toBe(false);
+  });
+
+  it('19. behavior changed to Hard Block after a window elapsed → denied', async () => {
+    const constraint = makeConstraint('delay-adv-19.example', 'delay', { delayMinutes: 1 });
+    await establishDelayWindow('delay-adv-19.example', constraint, true);
+    mock.store.constraints = [{ ...constraint, behavior: 'hard-block' }];
+    const result = await grantContinuation({ domain: 'delay-adv-19.example', tabId: 7 });
+    expect(result.success).toBe(false);
+  });
+
+  it('20. a recreated constraint (different ID) cannot inherit an old, elapsed window', async () => {
+    const old = makeConstraint('delay-adv-20.example', 'delay', { id: 'old-20', delayMinutes: 1 });
+    await establishDelayWindow('delay-adv-20.example', old, true);
+    const recreated = makeConstraint('delay-adv-20.example', 'delay', { id: 'new-20', delayMinutes: 15 });
+    mock.store.constraints = [recreated];
+    const result = await grantContinuation({ domain: 'delay-adv-20.example', tabId: 7 });
+    expect(result.success).toBe(false); // fresh window for the new constraint has not elapsed
+  });
+
+  it('21. accepted duration-snapshot semantics preserved: a same-ID edit to delayMinutes does not mutate an already-active, unelapsed window', async () => {
+    const constraint = makeConstraint('delay-adv-21.example', 'delay', { delayMinutes: 1 });
+    await establishDelayWindow('delay-adv-21.example', constraint, false); // active, not yet elapsed
+    // Live constraint edited to 6 minutes while that window is active — must not shorten or extend it.
+    mock.store.constraints = [{ ...constraint, delayMinutes: 6 }];
+    const result = await grantContinuation({ domain: 'delay-adv-21.example', tabId: 7 });
+    expect(result.success).toBe(false); // the original 1-minute window's own endTime is still in the future
+  });
+
+  it('22. refresh/revisit semantics preserved: repeated authorization checks at the same moment agree, and both later agree again once elapsed', async () => {
+    const constraint = makeConstraint('delay-adv-22.example', 'delay', { delayMinutes: 1 });
+    mock.store.constraints = [constraint];
+    // First REQUEST_CONTINUE establishes nothing (deny-only, per #14) —
+    // GET_DELAY_WINDOW is what a real page calls first; simulate that here.
+    await resolveDelayWindow('delay-adv-22.example', constraint);
+
+    const before1 = await grantContinuation({ domain: 'delay-adv-22.example', tabId: 7 });
+    const before2 = await grantContinuation({ domain: 'delay-adv-22.example', tabId: 8 });
+    expect(before1.success).toBe(false);
+    expect(before2.success).toBe(false); // same window, not independently (mis)computed per tab
+
+    await vi.advanceTimersByTimeAsync(60_001);
+
+    const after1 = await grantContinuation({ domain: 'delay-adv-22.example', tabId: 7 });
+    const after2 = await grantContinuation({ domain: 'delay-adv-22.example', tabId: 8 });
+    expect(after1.success).toBe(true);
+    expect(after2.success).toBe(true);
+  });
+
+  it('23. same-domain second-tab semantics: two different tabs consult the identical shared authoritative window', async () => {
+    const constraint = makeConstraint('delay-adv-23.example', 'delay', { delayMinutes: 1 });
+    mock.store.constraints = [constraint];
+    await establishDelayWindow('delay-adv-23.example', constraint, true);
+    expect((await grantContinuation({ domain: 'delay-adv-23.example', tabId: 7 })).success).toBe(true);
+    expect((await grantContinuation({ domain: 'delay-adv-23.example', tabId: 8 })).success).toBe(true);
+  });
+
+  it('24. continuation itself remains tab-scoped even though the delay window is domain-shared — each tab gets its own rule', async () => {
+    const constraint = makeConstraint('delay-adv-24.example', 'delay', { delayMinutes: 1 });
+    mock.store.constraints = [constraint];
+    await establishDelayWindow('delay-adv-24.example', constraint, true);
+    await grantContinuation({ domain: 'delay-adv-24.example', tabId: 7 });
+    await grantContinuation({ domain: 'delay-adv-24.example', tabId: 8 });
+    expect(mock.sessionRules.has(CONTINUATION_RULE_ID_BASE + 7)).toBe(true);
+    expect(mock.sessionRules.has(CONTINUATION_RULE_ID_BASE + 8)).toBe(true);
+  });
+});
+
+describe('grantContinuation — Hard Block remains absolute even with stale PIN/Delay authorization present', () => {
+  it('26a. a live Hard Block constraint denies continuation even when a PIN authorization for that exact tab/domain exists', async () => {
+    const constraint = makeConstraint('example.com', 'hard-block');
+    mock.store.constraints = [constraint];
+    // Simulates: this domain was pin-required a moment ago, the user
+    // verified correctly, then the constraint was switched to Hard
+    // Block before Continue was clicked.
+    mintPinAuthorization(7, 'example.com', constraint.id);
+    const result = await grantContinuation({ domain: 'example.com', tabId: 7 });
+    expect(result.success).toBe(false);
+    expect(mock.sessionRules.size).toBe(0);
+  });
+
+  it('26b. a live Hard Block constraint denies continuation even when an elapsed Delay window for that exact domain/constraint exists', async () => {
+    // Establish the window while the constraint is still (legitimately) a
+    // delay behavior, elapse it, then flip the same domain/id to Hard Block.
+    const delayConstraint = makeConstraint('hardblock-with-delay.example', 'delay', { id: 'hb-1', delayMinutes: 1 });
+    await establishDelayWindow('hardblock-with-delay.example', delayConstraint, true);
+    mock.store.constraints = [{ ...delayConstraint, behavior: 'hard-block' }];
+    const result = await grantContinuation({ domain: 'hardblock-with-delay.example', tabId: 7 });
+    expect(result.success).toBe(false);
+    expect(mock.sessionRules.size).toBe(0);
+  });
+});
+
+/**
+ * END-TO-END REGRESSION for the confirmed real-Chrome bug: Hard Block
+ * edited to Delay · 1 min showed 15 min on first visit, and both a
+ * refresh and a second tab restarted the count rather than reusing it.
+ * `delay-authority-service.test.ts` covers `pruneStaleDelayAuthorities`
+ * in isolation; this exercises the exact user-visible sequence through
+ * `grantContinuation` too, so the fix is proven at the layer the actual
+ * bug was observed at, not only at the unit under it.
+ */
+describe('regression — Hard Block edited to Delay reuses no stale authority (confirmed real-Chrome bug)', () => {
+  const domain = 'hb-to-delay-e2e.example';
+  const id = 'e2e-1';
+
+  it('A. first visit after Hard Block → Delay · 1 min uses the live 1-minute duration, not a stale 15-minute one', async () => {
+    // The constraint was Delay · 15 min at some earlier point (establishing
+    // a real, unelapsed authority), then edited to Hard Block — modeled by
+    // the same constraints-changed reaction service-worker.ts wires up.
+    await resolveDelayWindow(domain, makeConstraint(domain, 'delay', { id, delayMinutes: 15 }));
+    await pruneStaleDelayAuthorities([makeConstraint(domain, 'hard-block', { id, delayMinutes: null })]);
+
+    // Edited back to Delay · 1 min, same id, saved.
+    const constraint = makeConstraint(domain, 'delay', { id, delayMinutes: 1 });
+    mock.store.constraints = [constraint];
+    await pruneStaleDelayAuthorities([constraint]);
+
+    const window = await resolveDelayWindow(domain, constraint);
+    expect(window?.totalMs).toBe(60_000);
+
+    // Not yet elapsed — continuation correctly still denied.
+    expect((await grantContinuation({ domain, tabId: 1 })).success).toBe(false);
+  });
+
+  it('B. refresh ~20s later does not reset the window', async () => {
+    const constraint = makeConstraint(domain, 'delay', { id, delayMinutes: 1 });
+    mock.store.constraints = [constraint];
+    const first = await resolveDelayWindow(domain, constraint);
+
+    await vi.advanceTimersByTimeAsync(20_000);
+    const refreshed = await resolveDelayWindow(domain, constraint);
+
+    expect(refreshed).toEqual(first);
+  });
+
+  it('C. a second tab ~20s later sees the exact same remaining window', async () => {
+    const constraint = makeConstraint(domain, 'delay', { id, delayMinutes: 1 });
+    mock.store.constraints = [constraint];
+    const tabA = await resolveDelayWindow(domain, constraint);
+
+    await vi.advanceTimersByTimeAsync(20_000);
+    const tabB = await resolveDelayWindow(domain, constraint); // GET_DELAY_WINDOW carries no tab identity into the window at all
+
+    expect(tabB).toEqual(tabA);
+  });
+
+  it('D. once genuinely elapsed, Continue succeeds', async () => {
+    const constraint = makeConstraint(domain, 'delay', { id, delayMinutes: 1 });
+    mock.store.constraints = [constraint];
+    await resolveDelayWindow(domain, constraint);
+
+    await vi.advanceTimersByTimeAsync(60_001);
+
+    expect((await grantContinuation({ domain, tabId: 1 })).success).toBe(true);
+  });
+
+  it('E. a later, genuinely fresh window (previous one already elapsed and a new visit begins) uses whatever duration is configured then', async () => {
+    const constraint = makeConstraint(domain, 'delay', { id, delayMinutes: 1 });
+    mock.store.constraints = [constraint];
+    await resolveDelayWindow(domain, constraint);
+    await vi.advanceTimersByTimeAsync(60_001); // elapses
+
+    // Reconfigured to 5 minutes before the next visit.
+    const reconfigured = makeConstraint(domain, 'delay', { id, delayMinutes: 5 });
+    mock.store.constraints = [reconfigured];
+    await pruneStaleDelayAuthorities([reconfigured]); // still delay, same id — must NOT wipe an unelapsed window, but this one already elapsed so it's moot either way
+    const fresh = await resolveDelayWindow(domain, reconfigured);
+    expect(fresh?.totalMs).toBe(5 * 60_000);
+  });
+
+  it('F. active Delay · 15 edited mid-wait to 1 min: the active window stays 15; the NEXT fresh window (after it elapses) uses 1', async () => {
+    const constraint = makeConstraint(domain, 'delay', { id, delayMinutes: 15 });
+    mock.store.constraints = [constraint];
+    const active = await resolveDelayWindow(domain, constraint); // active, counting down, behavior never left 'delay'
+
+    const edited = makeConstraint(domain, 'delay', { id, delayMinutes: 1 });
+    mock.store.constraints = [edited];
+    await pruneStaleDelayAuthorities([edited]); // must be a no-op — legitimate Option A, not the bug
+
+    const stillActive = await resolveDelayWindow(domain, edited);
+    expect(stillActive).toEqual(active);
+    expect(stillActive?.totalMs).toBe(15 * 60_000); // unchanged by the edit
+
+    await vi.advanceTimersByTimeAsync(15 * 60_000 + 1); // the ORIGINAL 15-minute window elapses
+    const nextFreshWindow = await resolveDelayWindow(domain, edited);
+    expect(nextFreshWindow?.totalMs).toBe(60_000); // the next window honors the now-live 1-minute duration
+  });
+
+  it('G. Delay → Hard Block during an active, unelapsed window denies continuation immediately', async () => {
+    const constraint = makeConstraint(domain, 'delay', { id, delayMinutes: 15 });
+    mock.store.constraints = [constraint];
+    await resolveDelayWindow(domain, constraint); // active, not yet elapsed
+
+    const hardBlocked = makeConstraint(domain, 'hard-block', { id, delayMinutes: null });
+    mock.store.constraints = [hardBlocked];
+    await pruneStaleDelayAuthorities([hardBlocked]);
+
+    expect((await grantContinuation({ domain, tabId: 1 })).success).toBe(false);
+  });
+
+  it('H. PIN and Hard Block boundaries are unaffected by this fix', async () => {
+    const pinDomain = 'e2e-pin.example';
+    const pinConstraint = makeConstraint(pinDomain, 'pin-required');
+    mock.store.constraints = [pinConstraint];
+    // Direct REQUEST_CONTINUE with no PIN verification still denied.
+    expect((await grantContinuation({ domain: pinDomain, tabId: 1 })).success).toBe(false);
+    mintPinAuthorization(1, pinDomain, pinConstraint.id);
+    expect((await grantContinuation({ domain: pinDomain, tabId: 1 })).success).toBe(true);
+
+    const hbDomain = 'e2e-hardblock.example';
+    mock.store.constraints = [makeConstraint(hbDomain, 'hard-block')];
+    expect((await grantContinuation({ domain: hbDomain, tabId: 1 })).success).toBe(false);
   });
 });

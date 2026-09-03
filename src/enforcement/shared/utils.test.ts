@@ -1,22 +1,44 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { getUrlParam, getOriginalUrlFromHash, getOriginalUrl, goBackToOriginal, goBackOrToOriginal, requestContinuation } from './utils';
+import {
+  getUrlParam,
+  getOriginalUrlFromHash,
+  getOriginalUrl,
+  goBackToOriginal,
+  goBackOrToOriginal,
+  requestContinuation,
+  reconcileStaleEnforcementPage,
+} from './utils';
+import type { Constraint, ConstraintBehavior } from '../../shared/types/constraint';
 
 /**
  * No DOM is available under the `node` test environment this repository
  * uses (adding jsdom is a real dependency change this milestone doesn't
  * need) — these functions only ever touch `window.location.search`,
- * `window.location.hash`, `window.location.href`, and `window.history`,
- * so a minimal manual stub of just those is enough to exercise them for
- * real, without a full DOM.
+ * `window.location.hash`, `window.location.href`, `window.location.pathname`,
+ * `window.location.replace`, and `window.history`, so a minimal manual
+ * stub of just those is enough to exercise them for real, without a full DOM.
  */
 interface FakeWindow {
-  location: { search: string; hash: string; href: string };
+  location: { search: string; hash: string; href: string; pathname: string; replace: (url: string) => void };
   history: { back: () => void };
 }
 
-function setLocation(search: string, hash: string, href = `chrome-extension://ext/dist/src/enforcement/checkpoint/index.html${search}${hash}`): FakeWindow {
+function setLocation(
+  search: string,
+  hash: string,
+  pathname = '/dist/src/enforcement/checkpoint/index.html',
+  href = `chrome-extension://ext${pathname}${search}${hash}`
+): FakeWindow {
   const fakeWindow: FakeWindow = {
-    location: { search, hash, href },
+    location: {
+      search,
+      hash,
+      pathname,
+      href,
+      replace: vi.fn((url: string) => {
+        fakeWindow.location.href = url;
+      }),
+    },
     history: { back: vi.fn() },
   };
   (globalThis as unknown as { window: FakeWindow }).window = fakeWindow;
@@ -261,5 +283,151 @@ describe('requestContinuation', () => {
   it('returns false rather than throwing when the response is missing/null', async () => {
     mockRuntime(() => null);
     expect(await requestContinuation('facebook.com')).toBe(false);
+  });
+});
+
+/**
+ * REGRESSION SUITE for a confirmed real-Chrome bug: an enforcement page
+ * never re-checks the live constraint's *current* behavior against its
+ * own pathname after the initial DNR redirect landed it here. A plain
+ * refresh, a second tab reusing a since-stale page, or simply leaving
+ * the page open while the constraint is edited elsewhere never re-runs
+ * DNR — the extension's own `chrome-extension://` URL never matches a
+ * block/redirect rule's condition — so Hard Block edited to Delay (or
+ * any other behavior pair) left the WRONG enforcement page on screen
+ * indefinitely, including a phantom Delay countdown.
+ *
+ * `reconcileStaleEnforcementPage()` is the single shared fix all four
+ * enforcement pages (checkpoint.ts/delay.ts/pin.ts/block.ts) now call
+ * first in their own `init()` — these tests exercise it directly rather
+ * than duplicating page-specific harnesses for each.
+ */
+describe('reconcileStaleEnforcementPage — stale enforcement-page routing (confirmed real-Chrome bug)', () => {
+  beforeEach(() => {
+    (globalThis as unknown as { chrome: unknown }).chrome = { runtime: { id: 'ext' } };
+  });
+
+  afterEach(() => {
+    delete (globalThis as unknown as { chrome?: unknown }).chrome;
+  });
+
+  function makeConstraint(behavior: ConstraintBehavior, overrides: Partial<Constraint> = {}): Constraint {
+    return {
+      id: 'c1',
+      domain: 'facebook.com',
+      behavior,
+      delayMinutes: behavior === 'delay' ? 1 : null,
+      schedule: null,
+      customMessage: null,
+      createdAt: Date.now(),
+      progressiveDelay: null,
+      isPrivate: false,
+      ...overrides,
+    };
+  }
+
+  const PATHS: Record<'checkpoint' | 'delay' | 'pin' | 'block', string> = {
+    checkpoint: '/dist/src/enforcement/checkpoint/index.html',
+    delay: '/dist/src/enforcement/delay/index.html',
+    pin: '/dist/src/enforcement/pin/index.html',
+    block: '/dist/src/enforcement/block/index.html',
+  };
+
+  it('1. Hard Block page + live constraint now Delay → redirects to the canonical Delay page', () => {
+    const win = setLocation('?domain=facebook.com&behavior=hard-block', '#https://www.facebook.com/', PATHS.block);
+    const redirected = reconcileStaleEnforcementPage(makeConstraint('delay'));
+    expect(redirected).toBe(true);
+    expect(win.location.replace).toHaveBeenCalledOnce();
+    const target = (win.location.replace as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(target).toContain(PATHS.delay);
+    expect(target).toContain('domain=facebook.com');
+    expect(target).toContain('#https://www.facebook.com/');
+  });
+
+  it('2. Delay page + live constraint now Hard Block → redirects to the canonical Hard Block page, no Delay window is ever requested by the caller (caller must stop on true)', () => {
+    const win = setLocation('?domain=facebook.com&behavior=delay', '#https://www.facebook.com/', PATHS.delay);
+    const redirected = reconcileStaleEnforcementPage(makeConstraint('hard-block', { delayMinutes: null }));
+    expect(redirected).toBe(true);
+    const target = (win.location.replace as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(target).toContain(PATHS.block);
+  });
+
+  it('3. Delay page + live constraint now Checkpoint → redirects to the canonical Checkpoint page', () => {
+    const win = setLocation('?domain=facebook.com&behavior=delay', '#https://www.facebook.com/', PATHS.delay);
+    reconcileStaleEnforcementPage(makeConstraint('checkpoint', { delayMinutes: null }));
+    const target = (win.location.replace as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(target).toContain(PATHS.checkpoint);
+  });
+
+  it('4. Checkpoint page + live constraint now Hard Block → redirects to Hard Block', () => {
+    const win = setLocation('?domain=facebook.com&behavior=checkpoint', '#https://www.facebook.com/', PATHS.checkpoint);
+    reconcileStaleEnforcementPage(makeConstraint('hard-block', { delayMinutes: null }));
+    expect((win.location.replace as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain(PATHS.block);
+  });
+
+  it('5. PIN page + live constraint now Hard Block → redirects to Hard Block', () => {
+    const win = setLocation('?domain=facebook.com&behavior=pin-required', '#https://www.facebook.com/', PATHS.pin);
+    reconcileStaleEnforcementPage(makeConstraint('hard-block', { delayMinutes: null }));
+    expect((win.location.replace as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain(PATHS.block);
+  });
+
+  it('6. Hard Block page + live constraint now Checkpoint → redirects to Checkpoint', () => {
+    const win = setLocation('?domain=facebook.com&behavior=hard-block', '#https://www.facebook.com/', PATHS.block);
+    reconcileStaleEnforcementPage(makeConstraint('checkpoint', { delayMinutes: null }));
+    expect((win.location.replace as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain(PATHS.checkpoint);
+  });
+
+  it('7. same behavior as the current page → no redirect, no reload loop, caller proceeds normally', () => {
+    const win = setLocation('?domain=facebook.com&behavior=delay', '#https://www.facebook.com/', PATHS.delay);
+    const redirected = reconcileStaleEnforcementPage(makeConstraint('delay'));
+    expect(redirected).toBe(false);
+    expect(win.location.replace).not.toHaveBeenCalled();
+  });
+
+  it('7b. a legacy behavior that collapses onto the same canonical page as the current one does not redirect either (progressive-delay → delay page)', () => {
+    const win = setLocation('?domain=facebook.com&behavior=delay', '#https://www.facebook.com/', PATHS.delay);
+    const redirected = reconcileStaleEnforcementPage(makeConstraint('progressive-delay', { delayMinutes: 5 }));
+    expect(redirected).toBe(false);
+    expect(win.location.replace).not.toHaveBeenCalled();
+  });
+
+  it('8. no matching constraint anymore → safely exits enforcement via the existing goBackToOriginal mechanism, not a canonical-page redirect', () => {
+    const win = setLocation('?domain=facebook.com&behavior=delay', '#https://www.facebook.com/', PATHS.delay);
+    const redirected = reconcileStaleEnforcementPage(null);
+    expect(redirected).toBe(true);
+    expect(win.location.href).toBe('https://www.facebook.com/');
+  });
+
+  it('8b. no matching constraint and no usable original destination → falls back to history.back(), same as goBackToOriginal alone', () => {
+    const win = setLocation('', '');
+    reconcileStaleEnforcementPage(null);
+    expect(win.history.back).toHaveBeenCalledOnce();
+  });
+
+  it('9. manually opened wrong enforcement page (Checkpoint URL for a live Hard Block constraint) converges to Hard Block', () => {
+    const win = setLocation('?domain=facebook.com&behavior=checkpoint', '#https://www.facebook.com/', PATHS.checkpoint);
+    reconcileStaleEnforcementPage(makeConstraint('hard-block', { delayMinutes: null }));
+    expect((win.location.replace as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain(PATHS.block);
+  });
+
+  it('10. a stale Delay page for a now-non-Delay constraint redirects away rather than the caller creating/returning a Delay authority — proven at the routing layer; delay-authority-service.test.ts separately proves the background itself also fails closed', () => {
+    const win = setLocation('?domain=facebook.com&behavior=delay', '#https://www.facebook.com/', PATHS.delay);
+    const redirected = reconcileStaleEnforcementPage(makeConstraint('checkpoint', { delayMinutes: null }));
+    expect(redirected).toBe(true); // delay.ts's own init() never reaches its GET_DELAY_WINDOW call after this
+    expect((win.location.replace as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain(PATHS.checkpoint);
+  });
+
+  it('preserves the original URL fragment exactly, unmodified, through a reroute', () => {
+    const original = 'https://www.facebook.com/watch?v=abc&list=xyz#section-2';
+    const win = setLocation('?domain=facebook.com&behavior=hard-block', `#${original}`, PATHS.block);
+    reconcileStaleEnforcementPage(makeConstraint('delay'));
+    const target = (win.location.replace as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(target.endsWith(`#${original}`)).toBe(true);
+  });
+
+  it('never puts the behavior= param in the driver\'s seat — a live PIN constraint always routes to the PIN page regardless of what behavior= claimed on the stale page', () => {
+    const win = setLocation('?domain=facebook.com&behavior=checkpoint', '#https://www.facebook.com/', PATHS.checkpoint);
+    reconcileStaleEnforcementPage(makeConstraint('pin-required', { delayMinutes: null }));
+    expect((win.location.replace as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain(PATHS.pin);
   });
 });
