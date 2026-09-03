@@ -18,6 +18,7 @@ import {
 import { clearPinAuthorization, mintPinAuthorization } from './pin-authorization-service';
 import { resolveDelayWindow, pruneStaleDelayAuthorities } from './delay-authority-service';
 import { checkAndEnforceTab } from './tab-enforcement-service';
+import { removeV1LegacyStorage } from './legacy-cleanup';
 
 let ruleRefreshInFlight: Promise<void> | null = null;
 let ruleRefreshQueued = false;
@@ -346,7 +347,18 @@ function syncStateOnBoot(): void {
   });
 }
 
-chrome.runtime.onInstalled.addListener(syncStateOnBoot);
+chrome.runtime.onInstalled.addListener((details) => {
+  // V1 legacy storage hygiene, not a migration — see legacy-cleanup.ts.
+  // Not awaited: this and syncStateOnBoot() below are dispatched
+  // concurrently, not sequentially, which is safe only because they
+  // touch entirely disjoint storage keys.
+  if (details.reason === 'update') {
+    removeV1LegacyStorage().catch((error) => {
+      console.error('[boomrng] Failed to remove legacy V1 storage keys:', error);
+    });
+  }
+  syncStateOnBoot();
+});
 chrome.runtime.onStartup.addListener(syncStateOnBoot);
 
 syncStateOnBoot();
