@@ -1140,6 +1140,10 @@ Fixed with `pruneStaleDelayAuthorities()`, called from the same `chrome.storage.
 
 **Second, related bug found and fixed in the same pass:** `GET_DELAY_WINDOW`/`resolveDelayWindow()` had no floor of its own — given a missing constraint or one whose live behavior wasn't `delay`, it fell through to `resolveDelayMinutes()`'s generic default and happily created and persisted a 15-minute window for a domain that isn't Delay at all. `resolveDelayWindow()` now returns `null` (creating and persisting nothing) whenever `constraint` is missing or `constraint.behavior !== 'delay'`, and the `GET_DELAY_WINDOW` handler reports failure rather than fabricating a window. This is an independent, server-side backstop to `reconcileStaleEnforcementPage()` above, not a replacement for it — either one alone closes the phantom-15-minute symptom; both together mean neither the page nor the background can be the sole layer holding this invariant.
 
+### 30.10 Activation-time enforcement scope
+
+A constraint applies to an already-open matching page when the user next activates that tab. Boomrng does not proactively redirect matching background tabs.
+
 ---
 
 ## Final Review

@@ -10,6 +10,9 @@ import {
   handleContinuationAlarm,
   isContinuationAlarm,
   tabIdFromContinuationAlarm,
+  invalidateDocumentClearance,
+  wasConstraintClearedForTab,
+  pruneStaleDocumentClearances,
   CONTINUATION_RULE_ID_BASE,
   CONTINUATION_PRIORITY,
 } from './continuation-service';
@@ -386,13 +389,16 @@ describe('no persistent state — approved architecture decision 6', () => {
 
 describe('revokeContinuation — idempotent revoke', () => {
   it('is safe to call when nothing is active', async () => {
-    await expect(revokeContinuation(123)).resolves.toBeUndefined();
+    // Returns null, not undefined, since Milestone 9's activation-time
+    // enforcement fix: the resolved value now reports whether a real
+    // grant was consumed (for documentClearance), and there was none.
+    await expect(revokeContinuation(123)).resolves.toBeNull();
   });
 
   it('is safe to call twice in a row', async () => {
     await grantContinuation({ domain: 'facebook.com', tabId: 5 });
     await revokeContinuation(5);
-    await expect(revokeContinuation(5)).resolves.toBeUndefined();
+    await expect(revokeContinuation(5)).resolves.toBeNull();
   });
 });
 
@@ -979,5 +985,155 @@ describe('regression — Hard Block edited to Delay reuses no stale authority (c
     const hbDomain = 'e2e-hardblock.example';
     mock.store.constraints = [makeConstraint(hbDomain, 'hard-block')];
     expect((await grantContinuation({ domain: hbDomain, tabId: 1 })).success).toBe(false);
+  });
+});
+
+/**
+ * `documentClearance` — the state machine `tab-enforcement-service.ts`'s
+ * activation check relies on to avoid re-blocking a tab on every
+ * tab-switch after a real Continue, without granting anything broader
+ * than the existing per-navigation continuation model already does.
+ * Locked invariants (BOOMRNG-V2-DESIGN-SPEC.md tab-activation
+ * investigation, architecture-review follow-up):
+ *
+ * 1. A successful `grantContinuation()` records `{constraintId, behavior}`
+ *    on the active grant.
+ * 2. `invalidateDocumentClearance` (called from `service-worker.ts` on
+ *    `chrome.tabs.onUpdated`'s `status:'loading'`) clears any previous
+ *    clearance for that tab.
+ * 3. `revokeContinuation` still unconditionally removes the DNR
+ *    continuation rule regardless of what it finds — this must never be
+ *    weakened merely to obtain the metadata in point 4.
+ * 4. `handleNavigationComplete` establishes a fresh clearance only when
+ *    the completion actually consumed a real, recorded `activeGrants`
+ *    entry.
+ * 5. An unrelated completion — including one after a simulated
+ *    worker-restart where `activeGrants` was lost — must never
+ *    manufacture a clearance.
+ */
+describe('documentClearance — activation-time enforcement state machine', () => {
+  // Every test below uses its own, never-reused tabId — `documentClearance`
+  // is module-level state that persists across tests in this file (unlike
+  // `mock`, which `installChromeMock`/`uninstallChromeMock` do reset each
+  // time), so a shared tabId would let one test's clearance leak into the
+  // next and mask exactly the invariants being locked down here.
+
+  it('1+4. a successful grant, once its navigation completes, establishes clearance for that exact constraint id and behavior', async () => {
+    mock.store.constraints = [makeConstraint('example.com', 'checkpoint')];
+    const granted = await grantContinuation({ domain: 'example.com', tabId: 101 });
+    expect(granted.success).toBe(true);
+
+    await handleNavigationComplete(101);
+
+    expect(wasConstraintClearedForTab(101, 'c-example.com', 'checkpoint')).toBe(true);
+  });
+
+  it('5. a completion with no active grant does not establish clearance', async () => {
+    // No grantContinuation call at all for this tab.
+    await handleNavigationComplete(102);
+
+    expect(wasConstraintClearedForTab(102, 'c-example.com', 'checkpoint')).toBe(false);
+  });
+
+  it('3+5. worker-restart simulation: the DNR rule is still unconditionally removed, but no clearance is manufactured for a grant this instance never saw', async () => {
+    mock.store.constraints = [makeConstraint('example.com', 'checkpoint')];
+    const granted = await grantContinuation({ domain: 'example.com', tabId: 103 });
+    expect(granted.success).toBe(true);
+    expect(mock.sessionRules.has(CONTINUATION_RULE_ID_BASE + 103)).toBe(true);
+
+    // Simulate an MV3 service-worker restart: a fresh module instance has
+    // an empty `activeGrants`/`documentClearance`, exactly as a real
+    // restart would — `chrome` itself stays the same global mock, since
+    // only the JS module registry is reset, not the browser.
+    vi.resetModules();
+    const fresh = await import('./continuation-service');
+
+    const revokeResult = await fresh.revokeContinuation(103);
+
+    // Point 3: cleanup is unconditional regardless of the lost bookkeeping.
+    expect(mock.sessionRules.has(CONTINUATION_RULE_ID_BASE + 103)).toBe(false);
+    // Point 5: nothing to report, because this instance never saw the grant.
+    expect(revokeResult).toBeNull();
+    expect(fresh.wasConstraintClearedForTab(103, 'c-example.com', 'checkpoint')).toBe(false);
+  });
+
+  it('2. \'loading\' invalidates a previously-established clearance', async () => {
+    mock.store.constraints = [makeConstraint('example.com', 'checkpoint')];
+    await grantContinuation({ domain: 'example.com', tabId: 104 });
+    await handleNavigationComplete(104);
+    expect(wasConstraintClearedForTab(104, 'c-example.com', 'checkpoint')).toBe(true);
+
+    invalidateDocumentClearance(104);
+
+    expect(wasConstraintClearedForTab(104, 'c-example.com', 'checkpoint')).toBe(false);
+  });
+
+  it('constraint id match with a behavior mismatch does not inherit clearance (an id survives a behavior edit; a Checkpoint clearance must not exempt the same constraint once it becomes Delay)', async () => {
+    mock.store.constraints = [makeConstraint('example.com', 'checkpoint')];
+    await grantContinuation({ domain: 'example.com', tabId: 105 });
+    await handleNavigationComplete(105);
+    expect(wasConstraintClearedForTab(105, 'c-example.com', 'checkpoint')).toBe(true);
+
+    // Same id, edited to a different behavior — the exact-match query
+    // must reject it, even though the id alone still matches.
+    expect(wasConstraintClearedForTab(105, 'c-example.com', 'delay')).toBe(false);
+  });
+
+  it('a deleted constraint prunes its tab’s clearance', async () => {
+    mock.store.constraints = [makeConstraint('example.com', 'checkpoint')];
+    await grantContinuation({ domain: 'example.com', tabId: 106 });
+    await handleNavigationComplete(106);
+    expect(wasConstraintClearedForTab(106, 'c-example.com', 'checkpoint')).toBe(true);
+
+    pruneStaleDocumentClearances([]); // constraint no longer exists at all
+
+    expect(wasConstraintClearedForTab(106, 'c-example.com', 'checkpoint')).toBe(false);
+  });
+
+  it('a constraint edited to a different behavior prunes its tab’s clearance (same id, same reasoning as pruneStaleDelayAuthorities)', async () => {
+    const constraint = makeConstraint('example.com', 'checkpoint');
+    mock.store.constraints = [constraint];
+    await grantContinuation({ domain: 'example.com', tabId: 107 });
+    await handleNavigationComplete(107);
+    expect(wasConstraintClearedForTab(107, constraint.id, 'checkpoint')).toBe(true);
+
+    const edited = { ...constraint, behavior: 'hard-block' as const };
+    pruneStaleDocumentClearances([edited]);
+
+    expect(wasConstraintClearedForTab(107, constraint.id, 'checkpoint')).toBe(false);
+  });
+
+  it('an unedited, still-live constraint is left alone by pruning', async () => {
+    const constraint = makeConstraint('example.com', 'checkpoint');
+    mock.store.constraints = [constraint];
+    await grantContinuation({ domain: 'example.com', tabId: 108 });
+    await handleNavigationComplete(108);
+
+    pruneStaleDocumentClearances([constraint]); // unchanged — must be a no-op
+
+    expect(wasConstraintClearedForTab(108, constraint.id, 'checkpoint')).toBe(true);
+  });
+
+  it('a grant that only ever times out via the alarm/short backstop (never reaches handleNavigationComplete) never establishes clearance', async () => {
+    mock.store.constraints = [makeConstraint('example.com', 'checkpoint')];
+    await grantContinuation({ domain: 'example.com', tabId: 109 });
+
+    // The backstop path — handleContinuationAlarm — also calls
+    // revokeContinuation, but (unlike handleNavigationComplete) never
+    // inspects its return value to establish clearance.
+    await handleContinuationAlarm(109);
+
+    expect(wasConstraintClearedForTab(109, 'c-example.com', 'checkpoint')).toBe(false);
+  });
+
+  it('closing the tab drops its clearance', async () => {
+    mock.store.constraints = [makeConstraint('example.com', 'checkpoint')];
+    await grantContinuation({ domain: 'example.com', tabId: 110 });
+    await handleNavigationComplete(110);
+    expect(wasConstraintClearedForTab(110, 'c-example.com', 'checkpoint')).toBe(true);
+
+    await handleTabRemoved(110);
+
+    expect(wasConstraintClearedForTab(110, 'c-example.com', 'checkpoint')).toBe(false);
   });
 });

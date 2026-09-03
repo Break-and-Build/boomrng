@@ -2,7 +2,7 @@ import { normalizeDomain } from '../shared/utils/domain';
 import { buildBlockedSiteRegexFilter } from './rules-builder';
 import { loadConstraints } from '../shared/storage/storage-service';
 import { findMatchingConstraint } from '../shared/services/enforcement-context-service';
-import type { ConstraintBehavior } from '../shared/types/constraint';
+import type { Constraint, ConstraintBehavior } from '../shared/types/constraint';
 import { consumePinAuthorization } from './pin-authorization-service';
 import { isDelayWindowElapsed } from './delay-authority-service';
 
@@ -115,8 +115,85 @@ export function tabIdFromContinuationAlarm(alarmName: string): number | null {
  * survives a service-worker restart even though this bookkeeping
  * doesn't), and the alarm backstop is Chrome-persisted and needs no
  * memory of this map to fire correctly.
+ *
+ * Also carries the constraint id/behavior a grant was issued for —
+ * needed so `handleNavigationComplete` can tell *which* constraint a
+ * completing navigation just legitimately continued past, to hand off
+ * to `documentClearance` below. This is additive metadata only; it does
+ * not change when or why a grant is created or revoked.
  */
-const activeGrants = new Map<number, { timeoutHandle: ReturnType<typeof setTimeout> }>();
+const activeGrants = new Map<
+  number,
+  { timeoutHandle: ReturnType<typeof setTimeout>; constraintId: string; behavior: ConstraintBehavior }
+>();
+
+/**
+ * Document-scoped activation-time enforcement clearance (Milestone 9 gap
+ * fix — BOOMRNG-V2-DESIGN-SPEC.md tab-activation investigation). Answers
+ * "has this exact tab already legitimately continued past this exact
+ * constraint, for the document currently loaded" — the signal
+ * `tab-enforcement-service.ts`'s activation check needs to avoid
+ * re-blocking a tab on every tab-switch after a real Continue, without
+ * granting anything the existing per-navigation continuation model
+ * doesn't already grant.
+ *
+ * Deliberately narrower than `activeGrants`'s own lifetime, and derived
+ * entirely from the same two events that already exist for continuation
+ * cleanup — no independent policy is invented:
+ *
+ * - Established only inside `handleNavigationComplete`, and only when
+ *   that exact completion actually consumed an `activeGrants` entry
+ *   (i.e. this is the one navigation the grant was issued for) —
+ *   `handleContinuationAlarm` and the short in-process backstop also
+ *   call `revokeContinuation` but never look at its return value, so a
+ *   grant that times out unconsumed never establishes clearance.
+ * - Invalidated by `invalidateDocumentClearance`, called from
+ *   `service-worker.ts` on `chrome.tabs.onUpdated`'s `status:'loading'`
+ *   — the one `tabs`-API signal that reliably marks the start of a real
+ *   new top-level navigation (unlike `pushState`/`replaceState` or a
+ *   bfcache-served back/forward restore, neither of which transitions
+ *   through `'loading'`), so a document that's still genuinely on
+ *   screen keeps its clearance regardless of how long it's been open or
+ *   how many times its tab is switched away from and back.
+ * - Pruned by `pruneStaleDocumentClearances`, the same shape as
+ *   `pruneStaleDelayAuthorities` (id *and* behavior must both still
+ *   match the live constraint) for the same reason: a constraint's id
+ *   survives a behavior edit, so id-only would wrongly let a Checkpoint
+ *   clearance carry over to the same constraint after it becomes Delay.
+ *
+ * In-memory only, same acceptance as everything else in this file: lost
+ * on worker restart, which only ever means one extra, correct
+ * activation-time re-check — never a false clearance (see
+ * `handleNavigationComplete`'s null-check below).
+ */
+const documentClearance = new Map<number, { constraintId: string; behavior: ConstraintBehavior }>();
+
+/** Called from `service-worker.ts` on `chrome.tabs.onUpdated`'s `status:'loading'` — see `documentClearance`'s own doc comment for why this exact signal. */
+export function invalidateDocumentClearance(tabId: number): void {
+  documentClearance.delete(tabId);
+}
+
+/** The query `tab-enforcement-service.ts`'s activation check uses — true only when both the constraint id and its current behavior exactly match what this tab was actually granted continuation for. */
+export function wasConstraintClearedForTab(tabId: number, constraintId: string, behavior: ConstraintBehavior): boolean {
+  const cleared = documentClearance.get(tabId);
+  return cleared !== undefined && cleared.constraintId === constraintId && cleared.behavior === behavior;
+}
+
+/**
+ * Called from the same `chrome.storage.onChanged` handler that already
+ * calls `pruneStaleDelayAuthorities` — same shape, same reasoning: a
+ * clearance whose constraint was deleted, or whose behavior no longer
+ * matches what it was cleared for, no longer describes anything real and
+ * must not silently keep exempting that tab from a constraint that has
+ * since changed.
+ */
+export function pruneStaleDocumentClearances(constraints: Constraint[]): void {
+  for (const [tabId, cleared] of documentClearance) {
+    const owner = constraints.find((c) => c.id === cleared.constraintId);
+    const stillLegitimate = owner?.behavior === cleared.behavior;
+    if (!stillLegitimate) documentClearance.delete(tabId);
+  }
+}
 
 export interface GrantContinuationRequest {
   domain: string;
@@ -211,12 +288,12 @@ export async function grantContinuation({ domain, tabId }: GrantContinuationRequ
     return { success: false, error: error instanceof Error ? error.message : 'Failed to grant continuation' };
   }
 
-  armCleanup(tabId);
+  armCleanup(tabId, constraint.id, constraint.behavior);
   console.log(`[boomrng] Continuation granted (tab=${tabId}, rule=${ruleId})`);
   return { success: true };
 }
 
-function armCleanup(tabId: number): void {
+function armCleanup(tabId: number, constraintId: string, behavior: ConstraintBehavior): void {
   const existing = activeGrants.get(tabId);
   if (existing) clearTimeout(existing.timeoutHandle);
 
@@ -226,7 +303,7 @@ function armCleanup(tabId: number): void {
     });
   }, SHORT_BACKSTOP_MS);
 
-  activeGrants.set(tabId, { timeoutHandle });
+  activeGrants.set(tabId, { timeoutHandle, constraintId, behavior });
 
   // Replaces any existing alarm of the same name outright (documented
   // chrome.alarms.create behavior) — a double-click's second grant just
@@ -234,8 +311,28 @@ function armCleanup(tabId: number): void {
   chrome.alarms.create(continuationAlarmName(tabId), { delayInMinutes: ALARM_BACKSTOP_MINUTES });
 }
 
-/** Unconditionally removes the tab's continuation rule and clears its bookkeeping — safe to call even when nothing is active (a no-op `removeRuleIds` for an ID that doesn't exist is harmless), which is what lets every cleanup path call this without first proving a grant exists. */
-export async function revokeContinuation(tabId: number): Promise<void> {
+/**
+ * Unconditionally removes the tab's continuation rule and clears its
+ * bookkeeping — safe to call even when nothing is active (a no-op
+ * `removeRuleIds` for an ID that doesn't exist is harmless), which is
+ * what lets every cleanup path call this without first proving a grant
+ * exists. The DNR-rule removal and alarm clearing below run exactly as
+ * before, regardless of what (if anything) `activeGrants` contains.
+ *
+ * Returns the `{constraintId, behavior}` this tab's grant was issued for
+ * if `activeGrants` actually had one recorded, or `null` otherwise —
+ * `null` covers both "no grant was ever active for this tab" and "one
+ * was active but this worker instance's memory of it was lost to a
+ * restart." Only `handleNavigationComplete` inspects this return value
+ * (to decide whether to establish `documentClearance`); every other
+ * caller (`handleTabRemoved`, the short backstop, the alarm backstop)
+ * discards it, exactly as they discarded this function's `void` result
+ * before — this metadata does not change *when* or *why* a grant is
+ * revoked, only what a completion is told about what it just consumed.
+ */
+export async function revokeContinuation(
+  tabId: number
+): Promise<{ constraintId: string; behavior: ConstraintBehavior } | null> {
   const existing = activeGrants.get(tabId);
   if (existing) clearTimeout(existing.timeoutHandle);
   activeGrants.delete(tabId);
@@ -258,6 +355,11 @@ export async function revokeContinuation(tabId: number): Promise<void> {
   } catch (error) {
     console.error('[boomrng] Failed to remove continuation session rule:', error);
   }
+
+  // Reported regardless of whether the DNR call above succeeded — the
+  // fact this completion consumed a real, recorded grant is independent
+  // of whether removing its session rule happened to fail.
+  return existing ? { constraintId: existing.constraintId, behavior: existing.behavior } : null;
 }
 
 /**
@@ -280,9 +382,21 @@ export async function revokeContinuation(tabId: number): Promise<void> {
  * backstop. `revokeContinuation` is cheap and safe to call with nothing
  * to clean up, so there is no real cost to calling it unconditionally
  * here, same as at tab-close.
+ *
+ * Also the sole place `documentClearance` is ever established. The DNR
+ * cleanup above is unconditional and untouched by this — this only asks
+ * what `revokeContinuation` found, after it already did its unconditional
+ * work. `null` (no grant was active, including "one was active but a
+ * worker restart lost the record of it") means exactly one thing here:
+ * this completion must never manufacture a clearance it cannot prove —
+ * the tab is simply left to be re-checked, correctly, the next time it's
+ * activated.
  */
 export async function handleNavigationComplete(tabId: number): Promise<void> {
-  await revokeContinuation(tabId);
+  const consumedGrant = await revokeContinuation(tabId);
+  if (consumedGrant) {
+    documentClearance.set(tabId, consumedGrant);
+  }
 }
 
 /**
@@ -294,10 +408,12 @@ export async function handleNavigationComplete(tabId: number): Promise<void> {
  * rule itself hasn't, so tab-close cleanup always attempts removal
  * unconditionally. Tab-close events are rare enough that the extra,
  * usually-unnecessary DNR call here is not a meaningful cost the way it
- * would be on every single page load.
+ * would be on every single page load. Also drops any `documentClearance`
+ * for this tab — a closed tab has no document left to be cleared for.
  */
 export async function handleTabRemoved(tabId: number): Promise<void> {
   await revokeContinuation(tabId);
+  documentClearance.delete(tabId);
 }
 
 /** Called from `chrome.alarms.onAlarm` after confirming the alarm name is one of this module's own (`isContinuationAlarm`) — the long-lived, Chrome-persisted backstop that fires even if the service worker was terminated and lost all in-memory state, guaranteeing a grant can never outlive roughly a minute in the worst case. */

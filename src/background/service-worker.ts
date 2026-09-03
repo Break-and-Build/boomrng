@@ -12,9 +12,12 @@ import {
   handleContinuationAlarm,
   isContinuationAlarm,
   tabIdFromContinuationAlarm,
+  invalidateDocumentClearance,
+  pruneStaleDocumentClearances,
 } from './continuation-service';
 import { clearPinAuthorization, mintPinAuthorization } from './pin-authorization-service';
 import { resolveDelayWindow, pruneStaleDelayAuthorities } from './delay-authority-service';
+import { checkAndEnforceTab } from './tab-enforcement-service';
 
 let ruleRefreshInFlight: Promise<void> | null = null;
 let ruleRefreshQueued = false;
@@ -244,6 +247,12 @@ chrome.storage.onChanged.addListener((_changes, namespace) => {
     loadConstraints().then(pruneStaleDelayAuthorities).catch((error) => {
       console.error('[boomrng] Failed to prune stale delay authorities:', error);
     });
+    // Same reasoning, for activation-time enforcement clearance: an edit
+    // that deletes a constraint or changes its behavior must not leave a
+    // tab wrongly exempt from what that constraint now requires.
+    loadConstraints().then(pruneStaleDocumentClearances).catch((error) => {
+      console.error('[boomrng] Failed to prune stale document clearances:', error);
+    });
   }
 });
 
@@ -276,6 +285,16 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       console.error('[boomrng] Failed to clean up continuation on navigation complete:', error);
     });
   }
+  // 'loading' — not any url change — is the signal a genuine new
+  // top-level navigation is starting: `history.pushState`/`replaceState`
+  // and a bfcache-served back/forward restore both update `tab.url`
+  // without ever transitioning through 'loading', so neither one
+  // invalidates activation-time enforcement clearance (continuation-
+  // service.ts's `documentClearance`) — matching that DNR itself was
+  // never involved in either case either, today or with this listener.
+  if (changeInfo.status === 'loading') {
+    invalidateDocumentClearance(tabId);
+  }
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
@@ -284,6 +303,19 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   });
   updateBadge().catch((error) => {
     console.error('[boomrng] Failed to update badge after tab close:', error);
+  });
+});
+
+// Activation-time enforcement (Milestone 9 gap fix): DNR only evaluates a
+// *new* navigation request, so a tab that was already open and settled on
+// a domain before a matching constraint existed — or before it changed to
+// one — stays fully usable until switched to. Deliberately reactive only:
+// nothing here proactively reloads a tab the user isn't looking at; see
+// `tab-enforcement-service.ts` for the actual decision (and why a reload,
+// not a hand-built enforcement URL, is the only action taken).
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  checkAndEnforceTab(tabId).catch((error) => {
+    console.error('[boomrng] Failed to check tab for activation-time enforcement:', error);
   });
 });
 
