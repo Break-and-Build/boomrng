@@ -25,6 +25,12 @@
   transition: width 300ms ease;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .fill {
+    transition: none;
+  }
+}
+
 .default .fill {
   background: var(--accent);
 }

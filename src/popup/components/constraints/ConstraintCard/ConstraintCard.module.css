@@ -82,8 +82,14 @@
 }
 
 .actionButton:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actionButton {
+    transition: none;
+  }
 }
 
 .deleteButton:hover {

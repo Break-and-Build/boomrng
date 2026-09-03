@@ -44,7 +44,7 @@
   transform: translateY(-50%);
 }
 
-.pinInput:focus {
+.pinInput:focus-visible {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--focus-ring);
@@ -67,7 +67,7 @@
 }
 
 .ghostAction:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -88,7 +88,7 @@
 }
 
 .destructiveAction:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -110,7 +110,7 @@
 }
 
 .cancelAction:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -137,6 +137,6 @@
 }
 
 .forgotPinLink:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }

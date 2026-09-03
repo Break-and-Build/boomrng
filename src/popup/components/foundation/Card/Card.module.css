@@ -15,6 +15,12 @@
   border-color: var(--border-strong);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .interactive {
+    transition: none;
+  }
+}
+
 .none {
   padding: 0;
 }
