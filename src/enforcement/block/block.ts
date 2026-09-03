@@ -1,30 +1,61 @@
 import { getDomain, reconcileStaleEnforcementPage } from '../shared/utils';
 import { loadEnforcementContext } from '../../shared/services';
+import { buildBlockView } from './block-view';
 
-const domainEl = document.getElementById('domain');
-const goBackBtn = document.getElementById('goBack');
+const pageEl = document.getElementById('page');
+const domainChipEl = document.getElementById('domain');
+const goBackBtn = document.getElementById('goBack') as HTMLButtonElement | null;
 
 const domain = getDomain();
 
-if (goBackBtn) {
-  goBackBtn.addEventListener('click', () => {
-    window.history.back();
-  });
+/**
+ * Deliberately plain `history.back()` — NOT `goBackOrToOriginal()` or
+ * `goBackToOriginal()`. BOOMRNG-V2-DESIGN-SPEC.md §15: "Hard Block's
+ * 'Go Back' deliberately does not use goBackOrToOriginal() and keeps
+ * plain history.back() — §15's whole point is that Hard Block offers no
+ * path through to the blocked destination under any circumstance, so
+ * giving its one button a fallback that could land on that destination
+ * would silently reopen the exact escape hatch Hard Block exists to
+ * close." Both the button and Escape call this same function, never the
+ * shared original-URL fallback every other enforcement page uses.
+ */
+function goBack(): void {
+  window.history.back();
 }
 
+if (goBackBtn) {
+  goBackBtn.addEventListener('click', goBack);
+}
+
+// Escape maps to the same single action every other enforcement page
+// maps it to (§22: the entire product must be Escape-operable) — but
+// here that action is the restricted plain goBack() above, not the
+// shared goBackOrToOriginal() helper.
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    goBack();
+  }
+});
+
 async function init(): Promise<void> {
-  // Previously never looked at the live constraint at all — it rendered
-  // purely from the URL's own `domain=` param, so a stale Hard Block
-  // page (constraint edited to something else elsewhere, then this page
-  // refreshed) never converged to the correct enforcement page the way
-  // the other three already partly did via loadEnforcementContext
-  // (BOOMRNG-V2-DESIGN-SPEC.md §30.9).
   const { constraint } = await loadEnforcementContext(domain);
   if (reconcileStaleEnforcementPage(constraint)) return;
 
-  if (domainEl) {
-    domainEl.textContent = domain || 'unknown';
+  const view = buildBlockView(domain, constraint);
+
+  if (view.showDomain && domain && domainChipEl) {
+    domainChipEl.textContent = domain;
+    domainChipEl.hidden = false;
   }
+
+  if (pageEl) {
+    pageEl.hidden = false;
+    requestAnimationFrame(() => pageEl.classList.add('is-ready'));
+  }
+
+  // Single action, autofocused on load — matches Checkpoint/Delay/PIN's
+  // own precedent of always focusing the primary action.
+  goBackBtn?.focus();
 }
 
 init();
