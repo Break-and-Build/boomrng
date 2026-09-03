@@ -64,7 +64,7 @@ beforeEach(() => {
       makeConstraint('b.com', 'checkpoint'),
       makeConstraint('reddit.com', 'checkpoint'),
     ],
-    settings: { pin: null, tabBudget: 10, landingPage: '', allowedSites: [], schemaVersion: 1 },
+    settings: { pin: null, tabBudget: 10, allowedSites: [], schemaVersion: 1 },
   });
 });
 

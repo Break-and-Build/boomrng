@@ -39,13 +39,22 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  width: 100%;
   padding: 10px 12px;
+  border: none;
   border-bottom: 1px solid var(--border);
   background: var(--canvas);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .row:last-child {
   border-bottom: none;
+}
+
+.row:hover {
+  background: var(--surface-subtle);
 }
 
 .rowMain {

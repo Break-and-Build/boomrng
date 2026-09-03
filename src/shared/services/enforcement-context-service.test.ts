@@ -73,7 +73,7 @@ describe('loadEnforcementContext', () => {
   it('loads the matching constraint and current settings live from storage', async () => {
     installChromeMock({
       constraints: [makeConstraint({ id: 'a', domain: 'example.com', isPrivate: true })],
-      settings: { pin: '1234', tabBudget: 10, landingPage: '', allowedSites: [], schemaVersion: 1 },
+      settings: { pin: '1234', tabBudget: 10, allowedSites: [], schemaVersion: 1 },
     });
 
     const context = await loadEnforcementContext('example.com');
@@ -85,7 +85,7 @@ describe('loadEnforcementContext', () => {
   it('reflects the current settings.pin, not a value cached at some earlier point', async () => {
     installChromeMock({
       constraints: [makeConstraint({ id: 'a', domain: 'example.com', behavior: 'pin-required' })],
-      settings: { pin: null, tabBudget: 10, landingPage: '', allowedSites: [], schemaVersion: 1 },
+      settings: { pin: null, tabBudget: 10, allowedSites: [], schemaVersion: 1 },
     });
 
     const context = await loadEnforcementContext('example.com');
@@ -94,7 +94,7 @@ describe('loadEnforcementContext', () => {
   });
 
   it('returns a null constraint when nothing in storage matches', async () => {
-    installChromeMock({ constraints: [], settings: { pin: null, tabBudget: 10, landingPage: '', allowedSites: [], schemaVersion: 1 } });
+    installChromeMock({ constraints: [], settings: { pin: null, tabBudget: 10, allowedSites: [], schemaVersion: 1 } });
     const context = await loadEnforcementContext('example.com');
     expect(context.constraint).toBeNull();
   });
@@ -140,7 +140,7 @@ describe('loadEnforcementContextById', () => {
   it('loads the matching constraint and current settings live from storage', async () => {
     installChromeMock({
       constraints: [makeConstraint({ id: 'a', domain: 'example.com', isPrivate: true })],
-      settings: { pin: '1234', tabBudget: 10, landingPage: '', allowedSites: [], schemaVersion: 1 },
+      settings: { pin: '1234', tabBudget: 10, allowedSites: [], schemaVersion: 1 },
     });
 
     const context = await loadEnforcementContextById('a');
@@ -152,7 +152,7 @@ describe('loadEnforcementContextById', () => {
   it('returns a null constraint when the id does not exist (deleted/unknown cid)', async () => {
     installChromeMock({
       constraints: [makeConstraint({ id: 'a', domain: 'example.com' })],
-      settings: { pin: null, tabBudget: 10, landingPage: '', allowedSites: [], schemaVersion: 1 },
+      settings: { pin: null, tabBudget: 10, allowedSites: [], schemaVersion: 1 },
     });
 
     const context = await loadEnforcementContextById('does-not-exist');

@@ -19,7 +19,7 @@ function makeConstraint(overrides: Partial<Constraint>): Constraint {
   };
 }
 
-const BASE_SETTINGS: Settings = { pin: null, tabBudget: 10, landingPage: '', allowedSites: [], schemaVersion: 1 };
+const BASE_SETTINGS: Settings = { pin: null, tabBudget: 10, allowedSites: [], schemaVersion: 1 };
 
 function makeExport(constraints: Constraint[], settings: Settings = BASE_SETTINGS): ExportData {
   return { version: '1.0.0', exportedAt: Date.now(), settings, constraints };

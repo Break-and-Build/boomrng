@@ -19,7 +19,7 @@ export function validateConstraint(
 
   const normalizedDomain = normalizeDomain(domain);
   if (!normalizedDomain) {
-    errors.push({ field: 'domain', message: 'Enter a valid domain (e.g., twitter.com)' });
+    errors.push({ field: 'domain', message: 'Enter a valid domain, like twitter.com.' });
   }
 
   if ((behavior === 'delay' || behavior === 'progressive-delay')) {

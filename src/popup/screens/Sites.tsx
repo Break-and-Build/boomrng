@@ -16,14 +16,14 @@ import { resetPinAndDeleteProtectedConstraints, isPinProtected, authorizeConstra
 import { verifyPin } from '../../shared/services/pin-service';
 import { pluralize } from '../../shared/utils';
 import { AddIcon } from '../components/icons';
-import type { SitesFocusHint } from '../App';
+import type { SitesNavigationIntent } from '../App';
 import styles from './Sites.module.css';
 
 export interface SitesProps {
   onAddConstraint: () => void;
   onEditConstraint: (constraint: Constraint) => void;
   onNavigateToSettings: () => void;
-  focusHint: SitesFocusHint | null;
+  focusHint: SitesNavigationIntent | null;
   onFocusHintConsumed: () => void;
   /** Session-scoped private-constraint unlock (BOOMRNG-V2-DESIGN-SPEC.md §26) — lives in App, not here, because Sites unmounts across the Add/Edit focused flow and would otherwise lose it. */
   privateUnlocked: boolean;
@@ -101,23 +101,6 @@ export const Sites: React.FC<SitesProps> = ({
     }
   }, [settingsLoading, pinConfigured, privateUnlocked, onLockPrivate]);
 
-  // Sites remounts on return from a focused sub-flow (Add/Edit Constraint),
-  // so the calling button/row no longer exists to hold focus — the hint
-  // carried back from App tells us where to restore it. The target button
-  // only exists once useConstraints() finishes its initial load, so wait
-  // for that rather than consuming the hint against an empty-state render.
-  useEffect(() => {
-    if (!focusHint || isLoading) return;
-    const selector =
-      focusHint.type === 'add'
-        ? '[data-focus-target="add-constraint"]'
-        : `[data-edit-id="${focusHint.id}"]`;
-    const target = document.querySelector<HTMLElement>(selector);
-    if (!target) return;
-    target.focus();
-    onFocusHintConsumed();
-  }, [focusHint, onFocusHintConsumed, isLoading, constraints]);
-
   const openPinPrompt = useCallback((pendingEdit: Constraint | null) => {
     setPendingEditConstraint(pendingEdit);
     setPinPromptOpen(true);
@@ -162,7 +145,7 @@ export const Sites: React.FC<SitesProps> = ({
       // pin-required is gated here, not by the private branch below.
       if (constraint.behavior === 'pin-required') {
         if (!pinConfigured) {
-          showToast('Set a PIN in Settings to edit this constraint', 'info');
+          showToast('Set a PIN in Settings to edit this constraint.', 'info');
           return;
         }
         setPinPromptOpen(false);
@@ -177,7 +160,7 @@ export const Sites: React.FC<SitesProps> = ({
       }
       if (constraint.isPrivate && !privateUnlocked) {
         if (!pinConfigured) {
-          showToast('Set a PIN in Settings to edit private constraints', 'info');
+          showToast('Set a PIN in Settings to edit private constraints.', 'info');
           return;
         }
         openPinPrompt(constraint);
@@ -187,6 +170,36 @@ export const Sites: React.FC<SitesProps> = ({
     },
     [privateUnlocked, pinConfigured, showToast, openPinPrompt, onEditConstraint]
   );
+
+  // Sites remounts on return from a focused sub-flow (Add/Edit Constraint),
+  // so the calling button/row no longer exists to hold focus — the hint
+  // carried back from App tells us where to restore it. The target button
+  // only exists once useConstraints() finishes its initial load, so wait
+  // for that rather than consuming the hint against an empty-state render.
+  useEffect(() => {
+    if (!focusHint || isLoading) return;
+    if (focusHint.type === 'edit-request') {
+      // A Dashboard row tap arrives here as data, not as a direct call to
+      // `handleEditClick` — but once it does, it must run through the exact
+      // same authorization gate as a click on Sites' own row (a public
+      // Dashboard constraint can still be pin-required, §14). The intent is
+      // consumed immediately, before that gate runs, so a cancelled PIN
+      // prompt or any re-render `handleEditClick` triggers can never see
+      // this hint again and replay the request.
+      onFocusHintConsumed();
+      const targetConstraint = constraints.find((c) => c.id === focusHint.id);
+      if (targetConstraint) handleEditClick(targetConstraint);
+      return;
+    }
+    const selector =
+      focusHint.type === 'add'
+        ? '[data-focus-target="add-constraint"]'
+        : `[data-edit-id="${focusHint.id}"]`;
+    const target = document.querySelector<HTMLElement>(selector);
+    if (!target) return;
+    target.focus();
+    onFocusHintConsumed();
+  }, [focusHint, onFocusHintConsumed, isLoading, constraints, handleEditClick]);
 
   const handleCancelEditVerify = useCallback(() => {
     setEditVerifyTarget(null);
@@ -217,7 +230,7 @@ export const Sites: React.FC<SitesProps> = ({
       if (isPinProtected(constraint)) {
         if (!pinConfigured) {
           showToast(
-            constraint.isPrivate ? 'Set a PIN in Settings to delete private constraints' : 'Set a PIN in Settings to delete this constraint',
+            constraint.isPrivate ? 'Set a PIN in Settings to delete private constraints.' : 'Set a PIN in Settings to delete this constraint.',
             'info'
           );
           return;
@@ -318,7 +331,13 @@ export const Sites: React.FC<SitesProps> = ({
 
   const hasConstraints = constraints.length > 0;
   const hasPrivate = constraints.some((c) => c.isPrivate);
-  const deletingLabel = deletingConstraint?.isPrivate ? 'this private constraint' : `the constraint for ${deletingConstraint?.domain}`;
+  // BOOMRNG-V2-DESIGN-SPEC.md §21 locks two different confirmations: the
+  // private case deliberately keeps "delete" language (§26), while the
+  // ordinary case uses "Remove" throughout — never the real domain in the
+  // private case, always it in the ordinary one.
+  const deleteDialogCopy = deletingConstraint?.isPrivate
+    ? { title: 'Delete Constraint', message: 'Are you sure you want to delete this private constraint?', confirmLabel: 'Delete' }
+    : { title: 'Remove Constraint', message: `Remove the constraint for ${deletingConstraint?.domain}?`, confirmLabel: 'Remove' };
 
   let revealState: RevealBarState;
   if (!pinConfigured) revealState = 'no-pin';
@@ -345,8 +364,8 @@ export const Sites: React.FC<SitesProps> = ({
 
       {!hasConstraints ? (
         <EmptyState
-          title="Nothing constrained yet."
-          description="Add a site you want a pause before opening."
+          title="Nothing here yet."
+          description="Add your first constraint to get started."
           action={
             <Button onClick={onAddConstraint} data-focus-target="add-constraint">
               Add your first constraint
@@ -425,9 +444,9 @@ export const Sites: React.FC<SitesProps> = ({
           setDeletingConstraint(null);
         }}
         onConfirm={handleConfirmDelete}
-        title="Delete Constraint"
-        message={`Are you sure you want to delete ${deletingLabel}?`}
-        confirmLabel="Delete"
+        title={deleteDialogCopy.title}
+        message={deleteDialogCopy.message}
+        confirmLabel={deleteDialogCopy.confirmLabel}
       />
 
       <ForgotPinDialog isOpen={forgotPinOpen} onClose={handleCancelForgotPin} onConfirm={handleConfirmForgotPin} />

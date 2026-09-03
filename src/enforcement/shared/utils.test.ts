@@ -602,7 +602,7 @@ describe('resolveEnforcementContext — id-based resolution, adversarial cases (
   function seed(constraints: Constraint[]) {
     installChromeMock({
       constraints,
-      settings: { pin: null, tabBudget: 10, landingPage: '', allowedSites: [], schemaVersion: 1 },
+      settings: { pin: null, tabBudget: 10, allowedSites: [], schemaVersion: 1 },
     });
   }
 

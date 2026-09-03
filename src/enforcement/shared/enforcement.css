@@ -298,6 +298,25 @@ body {
   cursor: not-allowed;
 }
 
+/* Delay's "Continue" reveal only (§13) — a small, quiet fade once the wait
+   completes, not an alert. Scoped to this class alone, not the base
+   `.link-btn`, because Checkpoint's and PIN's link-buttons are visible from
+   first paint and must never inherit a delayed fade-in. */
+.delay-reveal {
+  opacity: 0;
+  transition: opacity 300ms ease-out;
+}
+
+.delay-reveal.is-visible {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .delay-reveal {
+    transition: none;
+  }
+}
+
 .enf .error-text {
   margin-top: 12px;
   margin-bottom: 0;

@@ -106,7 +106,7 @@ export const ConstraintForm: React.FC<ConstraintFormProps> = ({
     const domainError: Record<string, string> = {};
 
     if (!normalizedDomain) {
-      domainError.domain = 'Enter a valid domain (e.g., twitter.com)';
+      domainError.domain = 'Enter a valid domain, like twitter.com.';
     } else if (existingDomains.some((d) => normalizeDomain(d) === normalizedDomain)) {
       // Re-normalizing each existing domain here (rather than comparing
       // against the raw stored strings directly) is what makes this guard
@@ -114,7 +114,7 @@ export const ConstraintForm: React.FC<ConstraintFormProps> = ({
       // predates consistent domain normalization (BOOMRNG-V2-DESIGN-SPEC.md
       // §30.2) — a stored "WWW.Example.com" must still be recognized as
       // the same effective domain as a freshly-typed "example.com".
-      domainError.domain = 'This domain already has a constraint';
+      domainError.domain = 'This domain already has a constraint.';
     }
 
     const validation = validateConstraint(
@@ -256,7 +256,7 @@ export const ConstraintForm: React.FC<ConstraintFormProps> = ({
             );
           })}
         </div>
-        {errors.behavior && <p className={styles.error}>{errors.behavior}</p>}
+        {errors.behavior && <p className={styles.error} role="alert">{errors.behavior}</p>}
       </div>
 
       {showReason ? (

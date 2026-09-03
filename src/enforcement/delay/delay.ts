@@ -147,7 +147,11 @@ async function init(): Promise<void> {
         continueBtn.textContent = view.continueLabel;
         // Revealed only once, not re-hidden if render() runs again —
         // becoming available never becomes unavailable again mid-page-life.
+        // `hidden` is cleared first so the element leaves display:none —
+        // only then does adding `.is-visible` on the next frame trigger the
+        // opacity transition defined for `.delay-reveal` in enforcement.css.
         continueBtn.hidden = false;
+        requestAnimationFrame(() => continueBtn.classList.add('is-visible'));
       }
       return true;
     }

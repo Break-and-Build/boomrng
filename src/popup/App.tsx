@@ -20,13 +20,19 @@ type FocusedFlow = { type: 'add' } | { type: 'edit'; constraint: Constraint };
 
 // Sites fully unmounts while a focused flow is active, so focus can't be
 // restored via a surviving DOM ref on return — it's carried back as data.
-export type SitesFocusHint = { type: 'add' } | { type: 'edit'; id: string };
+// Also carries one-shot navigation intents into Sites from elsewhere in the
+// shell (Dashboard's row tap) that must run through Sites' own authorization
+// gate rather than opening Edit directly — see `edit-request` below.
+export type SitesNavigationIntent =
+  | { type: 'add' }
+  | { type: 'edit'; id: string }
+  | { type: 'edit-request'; id: string };
 
 export const App: React.FC = () => {
   const [activeScreen, setActiveScreen] = useState<Screen>('dashboard');
   const [constraints] = useConstraints();
   const [focusedFlow, setFocusedFlow] = useState<FocusedFlow | null>(null);
-  const [sitesFocusHint, setSitesFocusHint] = useState<SitesFocusHint | null>(null);
+  const [sitesFocusHint, setSitesFocusHint] = useState<SitesNavigationIntent | null>(null);
   // Session-scoped only (BOOMRNG-V2-DESIGN-SPEC.md §26) — lives here, not in
   // Sites, because Sites unmounts across the Add/Edit focused flow and would
   // otherwise lose it. Never persisted to chrome.storage; a fresh popup open
@@ -56,10 +62,20 @@ export const App: React.FC = () => {
     setActiveScreen('settings');
   }, []);
 
+  // Dashboard shows public constraints only, but a public constraint can
+  // still be `pin-required` — so this must not open Edit directly (that
+  // would bypass Sites' own PIN gate for that behavior, §14). Handing off
+  // to Sites as a navigation intent lets Sites' existing `handleEditClick`
+  // run its full authorization check exactly as it does for its own rows.
+  const handleOpenEditFromDashboard = useCallback((id: string) => {
+    setActiveScreen('sites');
+    setSitesFocusHint({ type: 'edit-request', id });
+  }, []);
+
   const renderScreen = () => {
     switch (activeScreen) {
       case 'dashboard':
-        return <Dashboard onNavigate={setActiveScreen} />;
+        return <Dashboard onNavigate={setActiveScreen} onOpenEdit={handleOpenEditFromDashboard} />;
       case 'sites':
         return (
           <Sites
@@ -87,7 +103,7 @@ export const App: React.FC = () => {
             onBack={handleBackFromFocusedFlow}
           />
         ) : (
-          <Header active={constraints.length > 0} />
+          <Header active={constraints.length > 0} count={constraints.length} />
         )}
         <main className={styles.main}>
           <div

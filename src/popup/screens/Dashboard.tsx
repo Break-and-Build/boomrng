@@ -16,9 +16,11 @@ const MAX_ROWS = 3;
 
 export interface DashboardProps {
   onNavigate: (screen: 'sites' | 'settings') => void;
+  /** Opens Edit for one constraint — routed through Sites' own authorization gate (App.tsx's `handleOpenEditFromDashboard`), never directly, since a public constraint here can still be pin-required (BOOMRNG-V2-DESIGN-SPEC.md §9/§14). */
+  onOpenEdit: (id: string) => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onOpenEdit }) => {
   const [constraints, , constraintsLoading] = useConstraints();
   const [settings, , settingsLoading] = useSettings();
   const tabCount = useTabCount();
@@ -55,7 +57,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       tabHint = 'At your limit';
       tabColor = 'var(--warning)';
     } else {
-      tabHint = `${pluralize(tabCount - budget, 'tab')} over`;
+      tabHint = `Over by ${tabCount - budget}`;
       tabColor = 'var(--destructive)';
     }
   }
@@ -90,14 +92,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                 const label = toV2BehaviorLabel(constraint.behavior);
                 const config = formatBehaviorConfig(constraint.behavior, constraint.delayMinutes);
                 return (
-                  <div className={styles.row} key={constraint.id}>
+                  <button
+                    type="button"
+                    className={styles.row}
+                    key={constraint.id}
+                    onClick={() => onOpenEdit(constraint.id)}
+                  >
                     <div className={styles.rowMain}>
                       <span className={styles.domain}>{constraint.domain}</span>
                     </div>
                     <Badge variant={toV2BehaviorBadgeVariant(label)}>
                       {config ? `${label} · ${config}` : label}
                     </Badge>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -127,7 +134,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           <div className={styles.noBudget}>
             <span className={styles.hint}>No tab budget set</span>
             <Button variant="ghost" size="sm" onClick={() => onNavigate('settings')}>
-              Set one in Settings
+              Set one
             </Button>
           </div>
         )}

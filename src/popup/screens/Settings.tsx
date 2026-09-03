@@ -175,7 +175,6 @@ export const Settings: React.FC = () => {
     try {
       const data = await exportData(includePrivate);
       downloadExport(data);
-      showToast(includePrivate ? 'Exported with private constraints' : 'Settings exported successfully', 'success');
     } catch (error) {
       showToast('Failed to export settings', 'error');
     } finally {
@@ -222,20 +221,12 @@ export const Settings: React.FC = () => {
       const data = JSON.parse(text) as ExportData;
       const result = await importData(data);
       if (result.success) {
-        if (result.pinDependentCount) {
-          showToast(
-            `Imported. ${pluralize(result.pinDependentCount, 'constraint')} need a PIN — set one above to manage them.`,
-            'success',
-            5000
-          );
-        } else {
-          showToast('Settings imported successfully', 'success');
-        }
+        showToast('Constraints imported.', 'success');
       } else {
-        showToast(`Import failed: ${result.errors[0]}`, 'error');
+        showToast("That file doesn't look like a Boomrng export.", 'error');
       }
     } catch (error) {
-      showToast('Invalid import file', 'error');
+      showToast("That file doesn't look like a Boomrng export.", 'error');
     } finally {
       setIsImporting(false);
       if (fileInputRef.current) {
@@ -297,7 +288,7 @@ export const Settings: React.FC = () => {
         ) : pinPanelMode === 'view' ? (
           <>
             <div className={styles.statusRow}>
-              <span className={styles.statusOn}>{pinDependentCount > 0 ? 'Protection is on' : 'PIN is set'}</span>
+              <span className={styles.statusOn}>{pinDependentCount > 0 ? 'Protection is on.' : 'PIN is set.'}</span>
             </div>
             <div className={styles.pinDots} aria-hidden="true">
               <span />

@@ -152,10 +152,6 @@ export function getConstraintId(): string | null {
   return getUrlParam('cid');
 }
 
-export function getBehavior(): string | null {
-  return getUrlParam('behavior');
-}
-
 /**
  * The one place every enforcement page resolves "which constraint am I
  * for" — prefers the opaque `cid` (BOOMRNG-V2-DESIGN-SPEC.md §30.7);
