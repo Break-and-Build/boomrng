@@ -7,14 +7,19 @@
   <link rel="stylesheet" href="../shared/enforcement.css">
 </head>
 <body>
-  <div class="enforcement-page">
-    <div class="enforcement-icon tabbudget">◉</div>
-    <h1 class="enforcement-title">Tab Budget Reached</h1>
-    <p class="enforcement-message">You've reached your tab limit. Close some tabs to continue.</p>
-    <div class="enforcement-actions">
-      <button class="btn btn-primary" id="retry">Try again</button>
+  <main class="enf enf-wide" id="page" hidden>
+    <svg class="glyph" viewBox="0 0 20 20" aria-hidden="true">
+      <rect x="3" y="4" width="11" height="8" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.55"/>
+      <rect x="5" y="6" width="11" height="8" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.8"/>
+      <rect x="7" y="8" width="11" height="8" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    </svg>
+    <h1 id="headline"></h1>
+    <p class="sub">Close a tab to keep going.</p>
+    <ul class="tab-list" id="tabList"></ul>
+    <div class="enf-actions">
+      <button type="button" class="btn btn-primary" id="closeOldest">Close oldest tab</button>
     </div>
-  </div>
+  </main>
   <div class="brand">boomrng</div>
   <script type="module" src="./tabbudget.ts"></script>
 </body>
