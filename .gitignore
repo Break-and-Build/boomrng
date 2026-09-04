@@ -3,3 +3,4 @@
 # STORE_SUBMISSION.md
 node_modules
 dist
+release/

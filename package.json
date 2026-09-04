@@ -13,13 +13,15 @@
     "test": "vitest",
     "test:run": "vitest run",
     "lint": "eslint src --ext .ts,.tsx",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "package": "node scripts/package-extension.mjs"
   },
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "adm-zip": "^0.6.0",
     "@types/chrome": "^0.0.260",
     "@types/node": "^26.4.1",
     "@types/react": "^18.2.43",
