@@ -1,17 +1,19 @@
 # boomrng
 
-**Behavioral constraint system for knowledge workers.**
+**Behavioral constraint system for intentional browsing.**
 
-boomrng enforces focus by blocking distracting sites and limiting your open tabs. It doesn't nag you; it stops you.
+boomrng lets you configure how much friction a distracting site gets — from a simple checkpoint to a hard block — instead of a single one-size-fits-all rule.
 
 ## Features
 
-- **Hard Redirects:** Blocks sites like YouTube and snaps you back to work.
-- **Timed Site Locks:** Set per-site lock timers in minutes, with automatic expiry.
-- **Optional PIN Lock:** Protect settings with a local PIN (4-6 digits).
-- **PIN Timer Override:** Temporarily bypass an active timed lock by entering your PIN.
-- **Tab Pressure:** Enforces a max tab limit (e.g., 5 tabs). If you open a 6th, it forces you to close one.
-- **The Wall:** Prevents you from browsing inside an "over-limit" tab.
+- **Checkpoint** — an interstitial that asks "is that what you meant to do?" before you continue.
+- **Delay** — wait out a countdown before you're allowed to continue.
+- **PIN Required** — continuing past the site requires your PIN.
+- **Hard Block** — no path through while the constraint is active.
+- **Scheduled locks** — restrict a constraint to specific days and times.
+- **Private constraints** — hide a constraint's site in boomrng's own popup until you unlock it with your PIN.
+- **Allowed Sites** — an exception list that's never constrained.
+- **Tab Budget** — a maximum open-tab count, enforced across all your normal Chrome windows, with a recovery screen to get back under the limit.
 
 ## How to Install (Developer Preview)
 
@@ -24,25 +26,25 @@ boomrng enforces focus by blocking distracting sites and limiting your open tabs
 ## Setup
 
 1.  Click the boomrng icon in your toolbar.
-2.  Add `youtube.com` (or your poison of choice) to Blocked Sites.
-3.  (Optional) Add a timer in minutes for each blocked site. Leave blank to always block.
-4.  Set a Redirect URL (e.g., `http://localhost:3000`, `https://figma.com`, `https://github.com`).
-5.  (Optional) Set Max Tabs to 5 for "Hard Mode."
-6.  Click **Save Settings**.
-
-## Timer Override
-
-1.  In settings, go to **Timer Override (PIN)**.
-2.  Select a site with an active timed lock.
-3.  Enter your PIN and click **Unlock Selected Site**.
+2.  Add a site and choose its behavior — Checkpoint, Delay, PIN Required, Hard Block, or a scheduled lock.
+3.  (Optional) Mark it private, or add a custom reminder message.
+4.  (Optional) Set a Tab Budget to cap how many tabs you keep open at once.
+5.  (Optional) Set a PIN in Settings to protect private constraints and PIN Required sites.
 
 ## PIN Notes
 
-- PIN is local to your browser profile (no cloud account).
-- If you forget your PIN, use **Forgot PIN? Reset PIN Lock** on the unlock screen.
+- The PIN is local to your browser profile — no account, no cloud sync.
+- If you forget your PIN, use "Forgot PIN?" to reset it. This permanently deletes the PIN along with every private and PIN Required constraint — it can't be undone.
+
+## Incognito
+
+boomrng does not currently support Incognito windows; its constraints do not function there in this version.
 
 ## Privacy
 
-- boomrng works locally in the browser.
-- Block lists, timers, PIN lock, redirect URL, and max-tab settings are stored with Chrome extension storage.
-- No account, analytics, or server sync is built into this version.
+- boomrng works entirely locally in your browser and makes no network requests of its own.
+- It does not transmit your configuration, PIN, or browsing activity off your device.
+- Your PIN is stored locally in plain text, never transmitted, and never included when you export your settings.
+- Marking a constraint private hides its site in boomrng's own popup — it does not encrypt it or hide it from Chrome's own browsing history.
+- No account, analytics, ads, or third-party tracking are built into this version.
+- See [`PRIVACY.md`](./PRIVACY.md) for the complete privacy policy.
