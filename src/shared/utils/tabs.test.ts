@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { shouldExcludeTabFromBudget } from './tabs';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { shouldExcludeTabFromBudget, queryEligibleNormalTabs } from './tabs';
 
 function makeTab(overrides: Partial<chrome.tabs.Tab>): chrome.tabs.Tab {
   return {
@@ -47,5 +47,44 @@ describe('shouldExcludeTabFromBudget', () => {
 
   it('counts a tab with no URL yet (e.g. still loading) rather than excluding it', () => {
     expect(shouldExcludeTabFromBudget(makeTab({ url: undefined }))).toBe(false);
+  });
+});
+
+describe('queryEligibleNormalTabs', () => {
+  afterEach(() => {
+    delete (globalThis as { chrome?: unknown }).chrome;
+  });
+
+  function installTabsQueryMock(tabs: chrome.tabs.Tab[]) {
+    const query = vi.fn().mockResolvedValue(tabs);
+    (globalThis as unknown as { chrome: { tabs: { query: typeof query } } }).chrome = {
+      tabs: { query },
+    };
+    return query;
+  }
+
+  it('queries only normal windows, leaving Incognito exclusion to the result filter', async () => {
+    const query = installTabsQueryMock([]);
+    await queryEligibleNormalTabs();
+    expect(query).toHaveBeenCalledWith({ windowType: 'normal' });
+  });
+
+  it('excludes Incognito tabs even though the query itself does not filter them', async () => {
+    installTabsQueryMock([
+      makeTab({ id: 1, url: 'https://example.com', incognito: true }),
+      makeTab({ id: 2, url: 'https://example.org', incognito: false }),
+    ]);
+    const result = await queryEligibleNormalTabs();
+    expect(result.map((t) => t.id)).toEqual([2]);
+  });
+
+  it('still applies the existing pinned/chrome/web-store exclusions', async () => {
+    installTabsQueryMock([
+      makeTab({ id: 1, url: 'https://example.com', pinned: true }),
+      makeTab({ id: 2, url: 'chrome://newtab/' }),
+      makeTab({ id: 3, url: 'https://example.org' }),
+    ]);
+    const result = await queryEligibleNormalTabs();
+    expect(result.map((t) => t.id)).toEqual([3]);
   });
 });

@@ -1,7 +1,7 @@
 import { generateRules } from './rules-builder';
 import { loadSettings, loadConstraints } from '../shared/storage/storage-service';
-import type { Constraint } from '../shared/types';
-import { shouldExcludeTabFromBudget } from '../shared/utils/tabs';
+import type { Constraint, Settings } from '../shared/types';
+import { queryEligibleNormalTabs } from '../shared/utils/tabs';
 import { verifyPin } from '../shared/services/pin-service';
 import { findMatchingConstraint } from '../shared/services/enforcement-context-service';
 import { normalizeDomain } from '../shared/utils/domain';
@@ -78,8 +78,7 @@ async function scheduleNextTimerRefresh(constraints: Constraint[]): Promise<void
 
 async function updateBadge(): Promise<void> {
   const settings = await loadSettings();
-  const tabs = await chrome.tabs.query({ currentWindow: true });
-  const count = tabs.filter((tab) => !shouldExcludeTabFromBudget(tab)).length;
+  const count = (await queryEligibleNormalTabs()).length;
   const max = settings.tabBudget;
 
   chrome.action.setBadgeText({ text: count.toString() });
@@ -102,8 +101,7 @@ async function enforceTabLimit(tab: chrome.tabs.Tab, attemptedUrl?: string): Pro
   const maxTabs = settings.tabBudget;
   if (maxTabs <= 0) return;
 
-  const tabs = await chrome.tabs.query({ currentWindow: true });
-  const countedTabs = tabs.filter((t) => !shouldExcludeTabFromBudget(t)).length;
+  const countedTabs = (await queryEligibleNormalTabs()).length;
   if (countedTabs <= maxTabs) return;
 
   if (isEnforcementPageUrl(tab.url) || isEnforcementPageUrl(attemptedUrl)) return;
@@ -117,6 +115,68 @@ async function enforceTabLimit(tab: chrome.tabs.Tab, attemptedUrl?: string): Pro
   if (tab.id) {
     chrome.tabs.update(tab.id, { url: limitPageUrl.toString() });
   }
+}
+
+/**
+ * Picks the one existing tab to redirect when a lowered Tab Budget
+ * immediately puts the current global count over the new limit — the
+ * user hasn't created or navigated any tab, so there's no natural
+ * "triggering tab" the way `enforceTabLimit`'s other callers have one.
+ * Prefers the active tab of the last-focused normal window (the tab the
+ * user is actually looking at); falls back to the eligible tab with the
+ * lowest `id` — the same global-monotonic-id proxy for "oldest"
+ * `tabbudget-view.ts`'s `getOldestTabs()` already uses for the recovery
+ * page's own "close oldest" — kept as a small local computation here
+ * rather than importing that module, since the background only ever
+ * needs a single deterministic tab, not the recovery page's full sorted
+ * list/row-building behavior.
+ */
+async function selectTabForImmediateEnforcement(eligibleTabs: chrome.tabs.Tab[]): Promise<chrome.tabs.Tab | null> {
+  try {
+    const focused = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
+    const activeInFocused = eligibleTabs.find((t) => t.windowId === focused.id && t.active);
+    if (activeInFocused) return activeInFocused;
+  } catch {
+    // No normal window currently focused — fall through to the deterministic fallback.
+  }
+
+  let oldest: chrome.tabs.Tab | null = null;
+  for (const t of eligibleTabs) {
+    if (t.id === undefined) continue;
+    if (oldest === null || (oldest.id !== undefined && t.id < oldest.id)) oldest = t;
+  }
+  return oldest;
+}
+
+/**
+ * Called only when `chrome.storage.onChanged` reports `settings.tabBudget`
+ * actually changed (see the listener below) — the product contract this
+ * closes: lowering the budget must enter enforcement immediately, without
+ * waiting for the next tab creation/navigation to happen to trip
+ * `enforceTabLimit`'s own check. Reuses `enforceTabLimit` unconditionally
+ * rather than duplicating its redirect/pending-URL/enforcement-page-guard
+ * logic — this only supplies the one thing a settings change doesn't
+ * naturally have: which tab to treat as "the" tab to redirect.
+ *
+ * `maxTabs <= 0` (disabled/no limit) intentionally never reaches
+ * selection at all — matches `enforceTabLimit`'s own early return for the
+ * same threshold, and covers "changed to 0" needing no enforcement.
+ * Raising the budget (or disabling it) while a Tab Budget page is already
+ * open is handled separately, on that page's own side (it now also
+ * listens for `chrome.storage.onChanged` and re-checks whether it should
+ * resume) — this function only ever enters enforcement, never releases it.
+ */
+async function reconcileTabBudgetOnSettingsChange(): Promise<void> {
+  const settings = await loadSettings();
+  if (settings.tabBudget <= 0) return;
+
+  const eligibleTabs = await queryEligibleNormalTabs();
+  if (eligibleTabs.length <= settings.tabBudget) return;
+
+  const selected = await selectTabForImmediateEnforcement(eligibleTabs);
+  if (!selected) return;
+
+  await enforceTabLimit(selected);
 }
 
 async function updateEnforcementRules(): Promise<void> {
@@ -233,7 +293,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-chrome.storage.onChanged.addListener((_changes, namespace) => {
+chrome.storage.onChanged.addListener((changes, namespace) => {
   if (namespace === 'local') {
     refreshEnforcementRules().catch((error) => {
       console.error('[boomrng] Failed to refresh enforcement rules:', error);
@@ -241,6 +301,18 @@ chrome.storage.onChanged.addListener((_changes, namespace) => {
     updateBadge().catch((error) => {
       console.error('[boomrng] Failed to update badge:', error);
     });
+    // Narrowly scoped to an actual `tabBudget` change — unlike the two
+    // calls above (cheap, side-effect-free, fine to run on every local
+    // write), this can redirect an open tab, so it only fires when the
+    // one setting it cares about actually changed.
+    const settingsChange = changes.settings;
+    const oldBudget = (settingsChange?.oldValue as Settings | undefined)?.tabBudget;
+    const newBudget = (settingsChange?.newValue as Settings | undefined)?.tabBudget;
+    if (newBudget !== undefined && newBudget !== oldBudget) {
+      reconcileTabBudgetOnSettingsChange().catch((error) => {
+        console.error('[boomrng] Failed to reconcile tab budget on settings change:', error);
+      });
+    }
     // Every constraint edit is exactly the moment a Delay authority can
     // become stale (behavior left `delay`, the constraint was deleted, or
     // it was recreated with a new id) — see pruneStaleDelayAuthorities's

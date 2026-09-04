@@ -1,6 +1,7 @@
 import { getUrlParam } from '../shared/utils';
 import { validateUrl } from '../../shared/services/validation-service';
 import { loadSettings } from '../../shared/storage/storage-service';
+import { queryEligibleNormalTabs } from '../../shared/utils/tabs';
 import { buildTabBudgetView, type TabBudgetView } from './tabbudget-view';
 
 const pageEl = document.getElementById('page');
@@ -25,10 +26,6 @@ function goToPending(): void {
 }
 
 let actionInFlight = false;
-
-async function queryCurrentWindowTabs(): Promise<chrome.tabs.Tab[]> {
-  return chrome.tabs.query({ currentWindow: true });
-}
 
 function renderRows(view: TabBudgetView): void {
   if (!listEl) return;
@@ -90,7 +87,7 @@ async function closeTab(tabId: number, rowEl: HTMLLIElement): Promise<void> {
 }
 
 async function refresh(): Promise<void> {
-  const [tabs, settings] = await Promise.all([queryCurrentWindowTabs(), loadSettings()]);
+  const [tabs, settings] = await Promise.all([queryEligibleNormalTabs(), loadSettings()]);
   const view = buildTabBudgetView(tabs, settings.tabBudget, pendingUrl !== null);
 
   if (view.isResolved) {
@@ -130,6 +127,17 @@ chrome.tabs.onCreated.addListener(() => {
 });
 chrome.tabs.onUpdated.addListener(() => {
   refresh().catch(() => {});
+});
+
+// Raising or disabling the budget must be able to release this page
+// immediately too, with no tab event required — re-runs the exact same
+// `refresh()` (and its existing `isResolved` -> `goToPending()` path) on
+// any settings/constraints write, matching how the other three listeners
+// above already just re-run `refresh()` unconditionally.
+chrome.storage.onChanged.addListener((_changes, namespace) => {
+  if (namespace === 'local') {
+    refresh().catch(() => {});
+  }
 });
 
 refresh();

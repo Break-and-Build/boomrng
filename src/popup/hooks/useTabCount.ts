@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react';
-import { shouldExcludeTabFromBudget } from '../../shared/utils/tabs';
+import { queryEligibleNormalTabs } from '../../shared/utils/tabs';
 
 export function useTabCount(): number {
   const [tabCount, setTabCount] = useState(0);
 
   useEffect(() => {
     async function fetchTabCount() {
-      const tabs = await chrome.tabs.query({ currentWindow: true });
-      const count = tabs.filter((tab) => !shouldExcludeTabFromBudget(tab)).length;
+      const count = (await queryEligibleNormalTabs()).length;
       setTabCount(count);
     }
 
