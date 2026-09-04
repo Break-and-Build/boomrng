@@ -11,6 +11,7 @@ export { verifyPin, isPinRequiredButNotConfigured } from './pin-service';
 
 export {
   findMatchingConstraint,
+  findMostSpecificMatchingConstraint,
   loadEnforcementContext,
   findConstraintById,
   loadEnforcementContextById,

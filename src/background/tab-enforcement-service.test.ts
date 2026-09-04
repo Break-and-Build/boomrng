@@ -206,6 +206,52 @@ describe('checkAndEnforceTab', () => {
     expect(reloadedTabIds).toEqual([211]);
   });
 
+  /**
+   * REGRESSION SUITE for the confirmed activation-time subdomain
+   * enforcement gap (findMostSpecificMatchingConstraint): a tab settled
+   * on a subdomain of a live constraint's domain, or on a more-specific
+   * child domain when an overlapping parent constraint also exists, must
+   * still be re-enforced correctly on activation — not silently skipped
+   * the way exact-match `findMatchingConstraint` used to skip it.
+   */
+  it('reloads a tab on a subdomain of a live constraint\'s domain — the confirmed activation-time bug', async () => {
+    mock.store.constraints = [makeConstraint('example.com', 'checkpoint')];
+    tabUrls[213] = 'https://docs.example.com/';
+    await checkAndEnforceTab(213);
+    expect(reloadedTabIds).toEqual([213]);
+  });
+
+  it('does not reload a tab on the parent domain of a subdomain-scoped constraint — reverse scope', async () => {
+    mock.store.constraints = [makeConstraint('docs.example.com', 'checkpoint')];
+    tabUrls[214] = 'https://example.com/';
+    await checkAndEnforceTab(214);
+    expect(reloadedTabIds).toEqual([]);
+  });
+
+  it('reloads a tab on a deeper descendant of a subdomain-scoped constraint', async () => {
+    mock.store.constraints = [makeConstraint('docs.example.com', 'checkpoint')];
+    tabUrls[215] = 'https://foo.docs.example.com/';
+    await checkAndEnforceTab(215);
+    expect(reloadedTabIds).toEqual([215]);
+  });
+
+  it('when both a parent and a more specific child constraint are live, activation enforces the more specific one\'s clearance — matches DNR\'s own specificity-prioritized redirect', async () => {
+    const parent = makeConstraint('example.com', 'hard-block');
+    const child = makeConstraint('docs.example.com', 'checkpoint');
+    mock.store.constraints = [parent, child];
+    tabUrls[216] = 'https://docs.example.com/';
+
+    // Clear the CHILD constraint specifically — if activation were still
+    // (wrongly) resolving to the parent Hard Block constraint, this
+    // clearance would not match and the tab would be reloaded anyway.
+    const granted = await grantContinuation({ domain: 'docs.example.com', tabId: 216 });
+    expect(granted.success).toBe(true); // sanity: Hard Block would never grant, so this proves 'child' was used
+    await handleNavigationComplete(216);
+
+    await checkAndEnforceTab(216);
+    expect(reloadedTabIds).toEqual([]);
+  });
+
   it('a subsequent \'loading\' navigation invalidates the clearance, so the tab is reloaded again on the next activation', async () => {
     const constraint = makeConstraint('example.com', 'checkpoint');
     mock.store.constraints = [constraint];

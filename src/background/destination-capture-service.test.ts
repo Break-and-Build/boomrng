@@ -127,6 +127,37 @@ describe('handleBeforeNavigate', () => {
     handleBeforeNavigate({ tabId: 8, frameId: 0, url: 'https://example.com/' });
     expect(await getCapturedDestination(8, 'c1')).toBeNull();
   });
+
+  /**
+   * Consistency regression: capture used to pick the first array-order
+   * match (`.find()`), the same defect the activation-time selector had.
+   * Now uses `findMostSpecificMatchingConstraint()` — the identical
+   * selector `tab-enforcement-service.ts` and DNR's own
+   * specificity-prioritized redirect rules agree on, so all three paths
+   * resolve `docs.example.com` to the same constraint.
+   */
+  it('when both a parent and a more specific child constraint are live, capture resolves to the more specific one\'s cid', async () => {
+    const parent = makeConstraint({ id: 'parent', domain: 'example.com', behavior: 'hard-block' });
+    const child = makeConstraint({ id: 'child', domain: 'docs.example.com', behavior: 'checkpoint' });
+    refreshConstraintCache([parent, child]);
+    mock.store.constraints = [parent, child];
+
+    handleBeforeNavigate({ tabId: 9, frameId: 0, url: 'https://docs.example.com/deep' });
+
+    expect(await getCapturedDestination(9, 'parent')).toBeNull(); // not captured under the broader constraint
+    expect(await getCapturedDestination(9, 'child')).toBe('https://docs.example.com/deep');
+  });
+
+  it('the overlapping-constraint precedence result does not depend on array order', async () => {
+    const parent = makeConstraint({ id: 'parent', domain: 'example.com', behavior: 'hard-block' });
+    const child = makeConstraint({ id: 'child', domain: 'docs.example.com', behavior: 'checkpoint' });
+    refreshConstraintCache([child, parent]); // reversed order
+    mock.store.constraints = [child, parent];
+
+    handleBeforeNavigate({ tabId: 10, frameId: 0, url: 'https://docs.example.com/deep' });
+
+    expect(await getCapturedDestination(10, 'child')).toBe('https://docs.example.com/deep');
+  });
 });
 
 describe('getCapturedDestination', () => {

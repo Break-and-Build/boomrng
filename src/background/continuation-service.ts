@@ -5,6 +5,7 @@ import { findMatchingConstraint } from '../shared/services/enforcement-context-s
 import type { Constraint, ConstraintBehavior } from '../shared/types/constraint';
 import { consumePinAuthorization } from './pin-authorization-service';
 import { isDelayWindowElapsed } from './delay-authority-service';
+import { CONTINUATION_PRIORITY } from './dnr-priority';
 
 /**
  * Grants a single, deliberately narrow, temporary exception to an active
@@ -69,17 +70,22 @@ const CONTINUATION_ELIGIBLE_BEHAVIORS: ReadonlySet<ConstraintBehavior> = new Set
 export const CONTINUATION_RULE_ID_BASE = 900_000;
 
 /**
- * Higher than the persistent block rule's priority 1 and the permanent
- * `allowedSites` mechanism's priority 2 — its own tier, so a continuation
- * grant is unambiguous on inspection as "temporary, click-granted",
- * never confusable with a user-configured permanent allowance. Chrome
- * orders all matching rules (session and dynamic together) by this
- * numeric priority first; a higher-priority `allow` rule wins
- * unconditionally over a lower-priority `redirect` rule — the
- * same-priority `allow` > `block` > `redirect` tiebreak documented by
- * Chrome is not something this design needs to rely on.
+ * Re-exported from `dnr-priority.ts`, Boomrng's one centralized DNR
+ * priority contract — see that module's doc comment for the full
+ * reasoning. Guaranteed strictly higher than every possible constraint
+ * redirect priority and the allowed-site priority, regardless of how
+ * specific any constraint's domain is, so a continuation grant is always
+ * unambiguous on inspection as "temporary, click-granted" and always
+ * wins over a block. Chrome orders all matching rules (session and
+ * dynamic together) by this numeric priority first; a higher-priority
+ * `allow` rule wins unconditionally over a lower-priority `redirect`
+ * rule — the same-priority `allow` > `block` > `redirect` tiebreak
+ * documented by Chrome is not something this design needs to rely on.
+ * This value changed from a flat `3` when specificity-based redirect
+ * priorities were introduced — a pure numeric change; the grant/revoke/
+ * cleanup mechanics this constant gates are otherwise untouched.
  */
-export const CONTINUATION_PRIORITY = 3;
+export { CONTINUATION_PRIORITY };
 
 /** Best-effort in-worker backstop — not a correctness guarantee, since an MV3 service worker can be terminated before this fires. See the long alarm backstop below for the guarantee. */
 const SHORT_BACKSTOP_MS = 10_000;

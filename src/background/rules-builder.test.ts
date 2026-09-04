@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { installChromeMock } from '../shared/testing/chrome-mock';
 import { generateRules, buildBlockedSiteRegexFilter, buildRedirectSubstitution } from './rules-builder';
+import { ALLOWED_SITE_PRIORITY } from './dnr-priority';
 
 // `generateRules` reads `chrome.declarativeNetRequest`'s enum constants
 // directly (not just their string values), so the mock needs to be
@@ -124,6 +125,48 @@ describe('generateRules', () => {
     const allowRules = rules.filter((r) => r.action.type === 'allow');
     expect(allowRules).toHaveLength(1);
     expect(allowRules[0].condition.urlFilter).toBe('||localhost');
+  });
+
+  /**
+   * REGRESSION SUITE for the confirmed DNR precedence gap: a flat
+   * priority 1 for every redirect rule left Chrome with no defined way
+   * to prefer a more specific constraint over a broader overlapping one
+   * (confirmed via Chrome's own documentation: same-priority, same-
+   * action-type rules have no standardized tie-break). Priorities are
+   * now specificity-based (dnr-priority.ts) so this is resolved
+   * deterministically instead.
+   */
+  it('a more specific overlapping constraint domain gets a strictly higher redirect priority than its parent', () => {
+    const rules = generateRules(
+      [
+        { url: 'example.com', behavior: 'hard-block', id: 'parent' },
+        { url: 'docs.example.com', behavior: 'checkpoint', id: 'child' },
+      ],
+      [],
+      EXT_ID
+    );
+    const redirectRules = rules.filter((r) => r.action.type === 'redirect');
+    expect(redirectRules).toHaveLength(2);
+
+    const parentRule = redirectRules.find((r) => r.action.redirect?.regexSubstitution?.includes('cid=parent'));
+    const childRule = redirectRules.find((r) => r.action.redirect?.regexSubstitution?.includes('cid=child'));
+    expect(parentRule).toBeDefined();
+    expect(childRule).toBeDefined();
+    expect(childRule!.priority ?? 0).toBeGreaterThan(parentRule!.priority ?? 0);
+  });
+
+  it('Allowed Site dominance: an allow rule\'s priority is strictly above even the most specific possible redirect priority', () => {
+    const rules = generateRules(
+      [{ url: 'a.b.c.d.e.f.g.example.com', behavior: 'hard-block', id: 'deep' }],
+      ['localhost'],
+      EXT_ID
+    );
+    const redirectRule = rules.find((r) => r.action.type === 'redirect');
+    const allowRule = rules.find((r) => r.action.type === 'allow');
+    expect(redirectRule).toBeDefined();
+    expect(allowRule).toBeDefined();
+    expect(allowRule!.priority ?? 0).toBeGreaterThan(redirectRule!.priority ?? 0);
+    expect(allowRule!.priority).toBe(ALLOWED_SITE_PRIORITY);
   });
 
   it('excludes a blocked constraint domain that is also in the allow list', () => {

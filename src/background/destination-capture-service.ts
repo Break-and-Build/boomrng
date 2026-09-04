@@ -1,6 +1,7 @@
 import type { Constraint } from '../shared/types/constraint';
 import { loadConstraints } from '../shared/storage/storage-service';
 import { isHostUnderConstraintDomain } from '../shared/utils/domain';
+import { findMostSpecificMatchingConstraint } from '../shared/services/enforcement-context-service';
 import { validateUrl } from '../shared/services/validation-service';
 import { extractHttpHost } from './tab-enforcement-service';
 
@@ -129,10 +130,6 @@ export function refreshConstraintCache(constraints: Constraint[]): void {
   constraintCache = constraints;
 }
 
-function findLiveMatch(host: string, constraints: Constraint[]): Constraint | null {
-  return constraints.find((c) => isHostUnderConstraintDomain(c.domain, host)) ?? null;
-}
-
 export function clearCapturedDestination(tabId: number): void {
   enqueueMutation(tabId, () => removeCapture(tabId));
 }
@@ -161,6 +158,21 @@ export function clearCapturedDestination(tabId: number): void {
  * `getCapturedDestination` for an unrelated later request that happens
  * to reuse the same tab, purely because nothing had overwritten it yet
  * and the TTL hadn't elapsed.
+ *
+ * Uses `findMostSpecificMatchingConstraint()` — the same selector
+ * `tab-enforcement-service.ts`'s activation-time re-check and
+ * `dnr-priority.ts`'s DNR redirect-priority assignment are all built on
+ * — not a local first-match lookup. A local `.find()` here would have
+ * been the same array-order defect the activation-time bug already
+ * demonstrated: when both `example.com` and `docs.example.com` are live
+ * and the navigation is to `docs.example.com`, capture must resolve to
+ * the same, more specific constraint a fresh navigation's DNR redirect
+ * and an activation-time re-check would — otherwise the destination
+ * captured here could belong to the *wrong* constraint's `cid`, and
+ * `getCapturedDestination` would then correctly refuse to serve it
+ * (cid mismatch), silently losing exact-destination fidelity for
+ * exactly the overlapping-constraint case this whole precedence fix
+ * exists for.
  */
 export function handleBeforeNavigate(details: { tabId: number; frameId: number; url: string }): void {
   if (details.frameId !== 0) return;
@@ -168,7 +180,7 @@ export function handleBeforeNavigate(details: { tabId: number; frameId: number; 
   const host = extractHttpHost(details.url);
   if (!host) return;
 
-  const constraint = findLiveMatch(host, constraintCache);
+  const constraint = findMostSpecificMatchingConstraint(host, constraintCache);
   if (constraint) {
     enqueueMutation(details.tabId, () => writeCapture(details.tabId, details.url, constraint.id));
   } else {

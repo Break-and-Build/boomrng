@@ -1,6 +1,6 @@
 import type { Constraint, ConstraintBehavior } from '../types/constraint';
 import type { Settings } from '../types/settings';
-import { normalizeDomain } from '../utils/domain';
+import { normalizeDomain, isHostUnderConstraintDomain, domainSpecificityRank } from '../utils/domain';
 import { loadConstraints, loadSettings } from '../storage/storage-service';
 
 export interface EnforcementContext {
@@ -29,6 +29,52 @@ export function findMatchingConstraint(domain: string | null, constraints: Const
   if (!normalizedTarget) return null;
 
   return constraints.find((c) => normalizeDomain(c.domain) === normalizedTarget) ?? null;
+}
+
+/**
+ * Resolves which live constraint actually governs a *real, arbitrary*
+ * navigated host — unlike `findMatchingConstraint()` above, whose every
+ * production caller already knows the exact constraint domain it's
+ * comparing against (an enforcement page's own already-resolved
+ * `constraint.domain`, round-tripped for a background authorization
+ * check). `checkAndEnforceTab()` (`tab-enforcement-service.ts`) and
+ * `destination-capture-service.ts` are the two exceptions: both start
+ * from a tab's or navigation's *live* URL, which could be any subdomain,
+ * not something already tied to a specific constraint. Exact matching
+ * there would miss a constraint on `example.com` for a tab actually
+ * sitting on `docs.example.com` — a confirmed real-Chrome activation-time
+ * enforcement gap.
+ *
+ * One-way `isHostUnderConstraintDomain()` finds every constraint whose
+ * DNR scope actually covers `host` (self or ancestor domain — never the
+ * reverse, so a constraint on `docs.example.com` never matches a plain
+ * visit to `example.com`). When more than one candidate matches — a
+ * `example.com` and a `docs.example.com` constraint both live, `host`
+ * being `docs.example.com` — the most specific one wins, ranked by
+ * `domainSpecificityRank()`, the exact same (capped) measure
+ * `dnr-priority.ts`'s `redirectPriorityForDomain()` uses to assign DNR
+ * priorities. This is deliberate, not incidental: DNR's own redirect
+ * rules are now specificity-prioritized so a fresh navigation to
+ * `docs.example.com` is redirected per the more specific constraint;
+ * this function has to agree, using the identical ranking, or activation
+ * re-checks and destination capture could enforce a *different*
+ * constraint than DNR itself would have on a fresh navigation to the
+ * same URL. A genuine tie between two *different* domains at equal rank
+ * is not reachable in valid data — two domains can only both be
+ * self-or-ancestor of the same host at equal specificity if they are the
+ * identical string, and exact-duplicate domains are already rejected at
+ * save time (`ConstraintForm.tsx`) — so this never actually falls back
+ * to array order for a real ambiguity.
+ */
+export function findMostSpecificMatchingConstraint(host: string | null, constraints: Constraint[]): Constraint | null {
+  if (!host) return null;
+
+  const candidates = constraints.filter((c) => isHostUnderConstraintDomain(c.domain, host));
+  if (candidates.length === 0) return null;
+
+  return candidates.reduce((best, current) =>
+    domainSpecificityRank(current.domain) > domainSpecificityRank(best.domain) ? current : best
+  );
 }
 
 /**

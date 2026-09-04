@@ -1,6 +1,7 @@
 import type { ConstraintBehavior } from '../shared/types/constraint';
 import { normalizeDomain } from '../shared/utils/domain';
 import { getEnforcementPagePath } from '../shared/services/enforcement-context-service';
+import { ALLOWED_SITE_PRIORITY, redirectPriorityForDomain } from './dnr-priority';
 
 interface BlockedSite {
   url: string;
@@ -115,7 +116,7 @@ export function generateRules(
   for (const site of normalizedAllowSites) {
     rules.push({
       id: idCounter++,
-      priority: 2,
+      priority: ALLOWED_SITE_PRIORITY,
       action: { type: chrome.declarativeNetRequest.RuleActionType.ALLOW },
       condition: {
         urlFilter: site,
@@ -149,7 +150,14 @@ export function generateRules(
 
     rules.push({
       id: idCounter++,
-      priority: 1,
+      // Specificity-based, not a flat 1 — see dnr-priority.ts. A
+      // constraint on `docs.example.com` gets a strictly higher priority
+      // than one on `example.com`, so when both match the same request
+      // Chrome's own (well-documented, unlike same-priority ties)
+      // higher-priority-wins rule deterministically picks the more
+      // specific constraint, matching what findMostSpecificMatchingConstraint()
+      // resolves for activation-time re-checks and destination capture.
+      priority: redirectPriorityForDomain(host),
       action: {
         type: chrome.declarativeNetRequest.RuleActionType.REDIRECT,
         // `host` remains the DNR match condition below (which requests get

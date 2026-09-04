@@ -1,6 +1,6 @@
 import type { Constraint } from '../shared/types/constraint';
 import { loadConstraints } from '../shared/storage/storage-service';
-import { findMatchingConstraint } from '../shared/services/enforcement-context-service';
+import { findMostSpecificMatchingConstraint } from '../shared/services/enforcement-context-service';
 import { normalizeDomain } from '../shared/utils/domain';
 import { wasConstraintClearedForTab } from './continuation-service';
 
@@ -63,13 +63,23 @@ export function shouldReloadTab(constraint: Constraint | null, isCleared: boolea
 
 /**
  * Called from `service-worker.ts`'s `chrome.tabs.onActivated` listener.
- * Reuses the same canonical domain matching every other enforcement path
- * already uses (`findMatchingConstraint`) — no second domain parser —
- * and never touches `chrome.declarativeNetRequest` directly; a reload is
- * the only action taken, letting the existing rule set decide the
- * outcome exactly as it would for a manual refresh (including correctly
- * falling through to an active continuation grant's higher-priority
- * `ALLOW` rule, with no awareness of that mechanism needed here).
+ * Uses `findMostSpecificMatchingConstraint()` — not `findMatchingConstraint()` —
+ * because `tab.url` is a real, arbitrary, live host, not something
+ * already tied to a specific constraint the way every other
+ * `findMatchingConstraint()` caller's input is. Exact matching here was a
+ * confirmed real-Chrome bug: a tab settled on `docs.example.com` was
+ * never re-enforced against a live constraint on the parent
+ * `example.com`, even though DNR's own regex would redirect that exact
+ * URL on any fresh navigation. `findMostSpecificMatchingConstraint()`
+ * resolves the same way DNR's now-specificity-prioritized redirect rules
+ * do (`dnr-priority.ts`) when a parent and a more specific child
+ * constraint both exist, so this never enforces a different constraint
+ * than a fresh navigation to the same URL would. Never touches
+ * `chrome.declarativeNetRequest` directly; a reload is the only action
+ * taken, letting the existing rule set decide the outcome exactly as it
+ * would for a manual refresh (including correctly falling through to an
+ * active continuation grant's higher-priority `ALLOW` rule, with no
+ * awareness of that mechanism needed here).
  */
 export async function checkAndEnforceTab(tabId: number): Promise<void> {
   let tab: chrome.tabs.Tab;
@@ -85,7 +95,7 @@ export async function checkAndEnforceTab(tabId: number): Promise<void> {
   if (!host) return;
 
   const constraints = await loadConstraints();
-  const constraint = findMatchingConstraint(host, constraints);
+  const constraint = findMostSpecificMatchingConstraint(host, constraints);
   if (!constraint) return;
 
   const isCleared = wasConstraintClearedForTab(tabId, constraint.id, constraint.behavior);

@@ -77,14 +77,18 @@ afterEach(() => {
 });
 
 describe('grantContinuation — rule construction', () => {
-  it('creates a session rule with priority 3, allow action, tabIds, and MAIN_FRAME only', async () => {
+  it('creates a session rule with the shared CONTINUATION_PRIORITY, allow action, tabIds, and MAIN_FRAME only', async () => {
     const result = await grantContinuation({ domain: 'facebook.com', tabId: 5 });
     expect(result.success).toBe(true);
 
     const rule = mock.sessionRules.get(CONTINUATION_RULE_ID_BASE + 5);
     expect(rule).toBeDefined();
+    // Sourced from dnr-priority.ts, not a literal here — asserting a
+    // specific number would just re-hardcode the exact drift this
+    // constant's whole redesign exists to prevent; dnr-priority.test.ts
+    // is what proves the actual value stays strictly above every
+    // possible redirect/allowed-site priority.
     expect(rule!.priority).toBe(CONTINUATION_PRIORITY);
-    expect(rule!.priority).toBe(3);
     expect(rule!.action.type).toBe('allow');
     expect(rule!.condition.tabIds).toEqual([5]);
     expect(rule!.condition.resourceTypes).toEqual(['main_frame']);

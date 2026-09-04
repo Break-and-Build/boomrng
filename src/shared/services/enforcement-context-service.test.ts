@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { installChromeMock, uninstallChromeMock } from '../testing/chrome-mock';
-import { findMatchingConstraint, loadEnforcementContext, findConstraintById, loadEnforcementContextById } from './enforcement-context-service';
+import {
+  findMatchingConstraint,
+  findMostSpecificMatchingConstraint,
+  loadEnforcementContext,
+  findConstraintById,
+  loadEnforcementContextById,
+} from './enforcement-context-service';
 import type { Constraint } from '../types/constraint';
 
 function makeConstraint(overrides: Partial<Constraint>): Constraint {
@@ -62,6 +68,74 @@ describe('findMatchingConstraint', () => {
       customMessage: 'stop scrolling',
       isPrivate: true,
     });
+  });
+});
+
+/**
+ * REGRESSION SUITE for the confirmed activation-time subdomain
+ * enforcement gap: `findMatchingConstraint()`'s exact-match semantics
+ * missed a live constraint on a *parent* domain for a tab settled on a
+ * subdomain. This selector is the fix, shared by
+ * `tab-enforcement-service.ts` and `destination-capture-service.ts` —
+ * both start from a real, arbitrary navigated host rather than an
+ * already-resolved constraint domain. Also proves the overlapping-
+ * constraint precedence rule (`domainSpecificityRank()`, the same
+ * measure `dnr-priority.ts`'s `redirectPriorityForDomain()` uses) so a
+ * fresh DNR navigation, activation-time re-check, and destination
+ * capture can never disagree about which constraint governs a URL.
+ */
+describe('findMostSpecificMatchingConstraint', () => {
+  it('a parent constraint matches a child (subdomain) host — the confirmed activation-time bug this fixes', () => {
+    const constraints = [makeConstraint({ id: 'a', domain: 'example.com' })];
+    expect(findMostSpecificMatchingConstraint('docs.example.com', constraints)?.id).toBe('a');
+  });
+
+  it('a child (subdomain) constraint does NOT match its own parent host — reverse scope', () => {
+    const constraints = [makeConstraint({ id: 'a', domain: 'docs.example.com' })];
+    expect(findMostSpecificMatchingConstraint('example.com', constraints)).toBeNull();
+  });
+
+  it('a child constraint matches a deeper descendant of itself', () => {
+    const constraints = [makeConstraint({ id: 'a', domain: 'docs.example.com' })];
+    expect(findMostSpecificMatchingConstraint('foo.docs.example.com', constraints)?.id).toBe('a');
+  });
+
+  it('when both a parent and a more specific child constraint are live, the more specific one wins', () => {
+    const constraints = [
+      makeConstraint({ id: 'parent', domain: 'example.com', behavior: 'hard-block' }),
+      makeConstraint({ id: 'child', domain: 'docs.example.com', behavior: 'checkpoint' }),
+    ];
+    expect(findMostSpecificMatchingConstraint('docs.example.com', constraints)?.id).toBe('child');
+  });
+
+  it('the precedence result does not depend on array order', () => {
+    const constraints = [
+      makeConstraint({ id: 'child', domain: 'docs.example.com', behavior: 'checkpoint' }),
+      makeConstraint({ id: 'parent', domain: 'example.com', behavior: 'hard-block' }),
+    ];
+    expect(findMostSpecificMatchingConstraint('docs.example.com', constraints)?.id).toBe('child');
+  });
+
+  it('a deeper descendant still resolves to the most specific of several overlapping ancestors', () => {
+    const constraints = [
+      makeConstraint({ id: 'grandparent', domain: 'example.com' }),
+      makeConstraint({ id: 'parent', domain: 'docs.example.com' }),
+    ];
+    expect(findMostSpecificMatchingConstraint('foo.docs.example.com', constraints)?.id).toBe('parent');
+  });
+
+  it('returns null when no constraint\'s domain relates to the host at all', () => {
+    const constraints = [makeConstraint({ id: 'a', domain: 'example.com' })];
+    expect(findMostSpecificMatchingConstraint('unrelated.example', constraints)).toBeNull();
+  });
+
+  it('returns null for a null host', () => {
+    const constraints = [makeConstraint({ id: 'a', domain: 'example.com' })];
+    expect(findMostSpecificMatchingConstraint(null, constraints)).toBeNull();
+  });
+
+  it('returns null when the constraint list is empty', () => {
+    expect(findMostSpecificMatchingConstraint('example.com', [])).toBeNull();
   });
 });
 
