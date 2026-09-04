@@ -14,6 +14,7 @@ export type EnforcementPageMessage =
   | { type: 'VALIDATE_PIN'; pin: string; domain: string }
   | { type: 'REQUEST_CONTINUE'; domain: string }
   | { type: 'GET_DELAY_WINDOW'; domain: string }
+  | { type: 'GET_CAPTURED_DESTINATION'; cid: string }
   | { type: 'TAB_CLOSED'; tabId: number };
 
 export type MessageResponse =

@@ -391,12 +391,27 @@ export async function revokeContinuation(
  * this completion must never manufacture a clearance it cannot prove —
  * the tab is simply left to be re-checked, correctly, the next time it's
  * activated.
+ *
+ * Returns the same `{constraintId, behavior} | null` `revokeContinuation`
+ * produced — purely additive, same precedent as widening
+ * `revokeContinuation`'s own return type: it doesn't change when or why
+ * clearance is established, only what this completion is told about what
+ * it just consumed. `service-worker.ts` uses a non-`null` result as the
+ * signal that a captured original-destination record
+ * (`destination-capture-service.ts`) has now served its purpose and
+ * should stop being retained — a real navigation just completed *because*
+ * a grant was consumed, which is the one moment this module already knows
+ * "the bridge from enforcement page back to the original destination was
+ * just used for real."
  */
-export async function handleNavigationComplete(tabId: number): Promise<void> {
+export async function handleNavigationComplete(
+  tabId: number
+): Promise<{ constraintId: string; behavior: ConstraintBehavior } | null> {
   const consumedGrant = await revokeContinuation(tabId);
   if (consumedGrant) {
     documentClearance.set(tabId, consumedGrant);
   }
+  return consumedGrant;
 }
 
 /**

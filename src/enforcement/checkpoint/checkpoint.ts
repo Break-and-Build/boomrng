@@ -38,9 +38,9 @@ if (continueBtn) {
     clearError();
 
     requestContinuation(domain)
-      .then((granted) => {
+      .then(async (granted) => {
         if (granted) {
-          goBackToOriginal();
+          await goBackToOriginal();
           return;
         }
         continueRequestInFlight = false;

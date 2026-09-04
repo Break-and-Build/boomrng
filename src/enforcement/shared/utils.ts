@@ -4,17 +4,21 @@ import type { Constraint } from '../../shared/types/constraint';
 import type { MessageResponse } from '../../shared/types/messages';
 
 /**
- * The one key every enforcement page's earliest inline bootstrap script
- * (see each page's own `index.html` `<head>`, first element, plain
- * classic script — not this module, which loads as a deferred
- * `type="module"` and would run too late to matter here) writes the
- * original destination into, and this module reads it back from.
- * BOOMRNG-V2-DESIGN-SPEC.md §30.7. Plain `sessionStorage`, not
- * `chrome.storage.session`: it's automatically scoped per tab (no manual
- * tabId bookkeeping needed), needs no permission beyond what a page
- * already has, and survives a same-origin internal navigation within the
- * same tab (exactly what a stale-route reconciliation reroute is) while
- * being cleared automatically when the tab closes.
+ * DEAD-IN-PRACTICE, RETAINED AS INERT DEFENSIVE COMPATIBILITY CODE
+ * (BOOMRNG-V2-DESIGN-SPEC.md §30.7). This key, `getOriginalUrlFromHash()`
+ * below, `computeOriginalUrlBootstrapAction()`, `applyOriginalUrlBootstrapAction()`,
+ * and `public/enforcement-bootstrap.js` (which mirrors the latter two)
+ * together implemented reading the original destination from the DNR
+ * redirect's own URL fragment. That fragment is a confirmed real-Chrome
+ * privacy defect — Chrome commits it to permanent History before any
+ * page script can strip it — so `rules-builder.ts` no longer produces one
+ * at all; the destination is now captured independently in the
+ * background (`destination-capture-service.ts`) and asked for via
+ * `getOriginalUrl()`'s primary path below. Nothing in this file removes
+ * this hash-handling code: it's cheap, harmless once no fragment ever
+ * arrives (every branch below degrades to its own no-op), and kept only
+ * in case some non-DNR path ever again lands here with one. Do not read
+ * its continued presence as evidence a fragment is still in normal use.
  */
 export const ORIGINAL_URL_STORAGE_KEY = 'boomrng_original_url';
 
@@ -89,28 +93,50 @@ export function applyOriginalUrlBootstrapAction(action: OriginalUrlBootstrapActi
 
 /**
  * Resolves to a *safe, navigable* http/https URL, or `null` if nothing
- * usable is present. Three layers, in order, per
- * BOOMRNG-V2-DESIGN-SPEC.md §30.7:
+ * usable is present.
  *
- * 1. **The hash, defensively.** By the time this module (a deferred
- *    `type="module"` script) runs, the page's own earliest inline
- *    bootstrap script has already read, validated, stored, and stripped
- *    the fragment — so this should normally find nothing. It's kept as a
- *    first check only in case that bootstrap step somehow didn't run,
- *    rather than silently falling through to a worse answer.
- * 2. **`sessionStorage`, the primary path** — what the bootstrap script
- *    actually stored. Re-validated here even though it was already
- *    validated at write time: never trust page-writable storage again
- *    at the point of use without re-checking, the same discipline
- *    applied everywhere else in this codebase a stored value feeds a
- *    navigation decision.
- * 3. **The domain-guess fallback** — unchanged from before this
- *    milestone, reachable if a page is opened with neither a usable
- *    fragment nor a stored value (manually, during development, or a
- *    genuinely corrupted state). Still loses path/query, still a last
- *    resort, never the primary path.
+ * **Primary path — the background-owned capture (BOOMRNG-V2-DESIGN-SPEC.md
+ * §30.7).** Asks the background for whatever it independently captured
+ * via `chrome.webNavigation.onBeforeNavigate` for this exact tab and
+ * constraint (`GET_CAPTURED_DESTINATION`, keyed by `cid` — see
+ * `destination-capture-service.ts`). This is what replaced embedding the
+ * destination in the DNR redirect's own URL, which committed it to Chrome
+ * History before any page script could ever run. Skipped when this page
+ * has no `cid` at all (the legacy `?domain=`-only case below).
+ *
+ * **Everything after this point is legacy, dead-in-practice fallback**,
+ * kept only because removing it costs more than it's worth (see
+ * `getOriginalUrlFromHash()`'s own doc comment) — no fresh redirect has
+ * produced a fragment since the capture mechanism above replaced it:
+ *
+ * 1. **The hash** — normally empty; would only ever be non-empty if some
+ *    external, non-DNR navigation happened to arrive with one.
+ * 2. **`sessionStorage`** — what the (now-inert) bootstrap script would
+ *    have stored, back when a fragment could still arrive.
+ * 3. **The domain-guess fallback** — reachable whenever the background
+ *    has nothing captured (expired, cleared by an unrelated navigation,
+ *    lost to a worker restart, or this page has no `cid`) — this is now
+ *    the *expected*, not exceptional, degraded case, not just a
+ *    last-resort for a corrupted state.
  */
-export function getOriginalUrl(): string | null {
+export async function getOriginalUrl(): Promise<string | null> {
+  const cid = getConstraintId();
+  if (cid) {
+    try {
+      const response = (await sendMessage({ type: 'GET_CAPTURED_DESTINATION', cid })) as MessageResponse | null;
+      if (response?.success === true) {
+        const captured = (response.data as { url?: string | null } | undefined)?.url;
+        if (typeof captured === 'string' && validateUrl(captured)) {
+          return captured;
+        }
+      }
+    } catch {
+      // Background unreachable, or the request otherwise failed — fall
+      // through to the legacy tiers below exactly as if nothing had been
+      // captured.
+    }
+  }
+
   const raw = getOriginalUrlFromHash();
 
   if (raw) {
@@ -198,8 +224,8 @@ export async function requestContinuation(domain: string): Promise<boolean> {
 }
 
 /** "Continue to [destination] anyway" / a successful PIN check — navigates to the validated original destination, or falls back to plain `history.back()` only when no usable destination exists at all. */
-export function goBackToOriginal(): void {
-  const original = getOriginalUrl();
+export async function goBackToOriginal(): Promise<void> {
+  const original = await getOriginalUrl();
   if (original) {
     window.location.href = original;
   } else {
@@ -226,9 +252,9 @@ export function goBackOrToOriginal(): void {
   const before = window.location.href;
   window.history.back();
 
-  setTimeout(() => {
+  setTimeout(async () => {
     if (window.location.href === before) {
-      const original = getOriginalUrl();
+      const original = await getOriginalUrl();
       if (original) {
         window.location.href = original;
       }

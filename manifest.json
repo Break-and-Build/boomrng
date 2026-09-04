@@ -3,7 +3,7 @@
   "name": "boomrng",
   "version": "2.0.0",
   "description": "Behavioral constraint system for intentional browsing",
-  "permissions": ["storage", "tabs", "declarativeNetRequest", "alarms"],
+  "permissions": ["storage", "tabs", "declarativeNetRequest", "alarms", "webNavigation"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "dist/service-worker.js",

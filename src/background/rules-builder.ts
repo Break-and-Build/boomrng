@@ -64,24 +64,23 @@ export function buildBlockedSiteRegexFilter(host: string): string {
 }
 
 /**
- * The redirect target for a blocked site. `\0` is DNR's token for "the
- * entire matched URL" — placing it after a literal `#` (never in a query
- * parameter position) is what makes this safe: `regexSubstitution` does
- * plain string substitution with no encoding, so a matched URL containing
- * its own `&`/`=`/`#`/`?` would corrupt a query-parameter position, but a
- * URL fragment is never split into key/value pairs by the browser and can
- * hold that text verbatim (BOOMRNG-V2-DESIGN-SPEC.md §30.1). This is the
- * one and only place the original destination is preserved.
+ * The redirect target for a blocked site. Carries only the constraint's
+ * own opaque `id` (`cid`) and `behavior` — never a domain, and never the
+ * original destination in any form (BOOMRNG-V2-DESIGN-SPEC.md §30.7).
  *
- * The query string carries the constraint's own opaque `id` (`cid`), not
- * its domain (§30.7 — the enforcement page resolves `cid` to the live
- * constraint itself, then uses `constraint.domain` for everything
- * downstream; nothing about that resolution needs the domain to appear
- * in a URL at all). The `#\0` fragment handoff is unchanged: each
- * enforcement page's earliest inline bootstrap script (see its own
- * `index.html`) reads it once, stores it in `sessionStorage`, and strips
- * it before any other page code runs — the fragment is never left
- * sitting in the visible URL past that first synchronous step.
+ * Previously this also appended `#\0` (DNR's token for "the entire
+ * matched URL") so the enforcement page could recover the original
+ * destination from its own URL fragment. That was a confirmed real-Chrome
+ * privacy defect: Chrome commits the fragment-bearing redirect target to
+ * its permanent History before any page script — including the earliest
+ * possible bootstrap — ever runs, so a client-side strip afterward cannot
+ * prevent the disclosure; both the pre- and post-strip URLs end up
+ * recorded as separate History entries. The destination is now captured
+ * independently, in the background, via `destination-capture-service.ts`
+ * (`chrome.webNavigation.onBeforeNavigate`, tab-scoped, memory-only,
+ * never written to any URL, log, or storage) and served to the
+ * enforcement page only after live re-validation — see that module's own
+ * doc comment for the full design.
  */
 export function buildRedirectSubstitution(
   extensionId: string,
@@ -89,7 +88,7 @@ export function buildRedirectSubstitution(
   constraintId: string,
   behavior: ConstraintBehavior
 ): string {
-  return `chrome-extension://${extensionId}/dist/${pagePath}?cid=${encodeURIComponent(constraintId)}&behavior=${encodeURIComponent(behavior)}#\\0`;
+  return `chrome-extension://${extensionId}/dist/${pagePath}?cid=${encodeURIComponent(constraintId)}&behavior=${encodeURIComponent(behavior)}`;
 }
 
 export function generateRules(

@@ -54,12 +54,15 @@ describe('buildBlockedSiteRegexFilter', () => {
 });
 
 describe('buildRedirectSubstitution', () => {
-  it('places the whole-match token after a literal "#", never in a query position', () => {
+  it('produces exactly cid and behavior, with no fragment and no destination of any kind (BOOMRNG-V2-DESIGN-SPEC.md §30.7)', () => {
     const substitution = buildRedirectSubstitution(EXT_ID, 'src/enforcement/checkpoint/index.html', 'c1', 'checkpoint');
-    expect(substitution).toBe(
-      `chrome-extension://${EXT_ID}/dist/src/enforcement/checkpoint/index.html?cid=c1&behavior=checkpoint#\\0`
-    );
-    expect(substitution.endsWith('#\\0')).toBe(true);
+    expect(substitution).toBe(`chrome-extension://${EXT_ID}/dist/src/enforcement/checkpoint/index.html?cid=c1&behavior=checkpoint`);
+  });
+
+  it('never contains a "#" fragment — the confirmed real-Chrome History-disclosure mechanism this replaces', () => {
+    const substitution = buildRedirectSubstitution(EXT_ID, 'src/enforcement/checkpoint/index.html', 'c1', 'checkpoint');
+    expect(substitution).not.toContain('#');
+    expect(substitution).not.toContain('\\0');
   });
 
   it('percent-encodes the constraint id and behavior query values', () => {
@@ -84,7 +87,7 @@ describe('generateRules', () => {
     expect(redirectRules[0].action.redirect?.url).toBeUndefined();
     expect(redirectRules[0].action.redirect?.regexSubstitution).toContain('cid=c1');
     expect(redirectRules[0].action.redirect?.regexSubstitution).toContain('behavior=checkpoint');
-    expect(redirectRules[0].action.redirect?.regexSubstitution?.endsWith('#\\0')).toBe(true);
+    expect(redirectRules[0].action.redirect?.regexSubstitution).not.toContain('#');
   });
 
   it('routes each behavior to its own enforcement page', () => {

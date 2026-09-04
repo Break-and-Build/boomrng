@@ -19,6 +19,12 @@ import { clearPinAuthorization, mintPinAuthorization } from './pin-authorization
 import { resolveDelayWindow, pruneStaleDelayAuthorities } from './delay-authority-service';
 import { checkAndEnforceTab } from './tab-enforcement-service';
 import { removeV1LegacyStorage } from './legacy-cleanup';
+import {
+  handleBeforeNavigate,
+  refreshConstraintCache,
+  clearCapturedDestination,
+  getCapturedDestination,
+} from './destination-capture-service';
 
 let ruleRefreshInFlight: Promise<void> | null = null;
 let ruleRefreshQueued = false;
@@ -291,6 +297,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     grantContinuation({ domain: message.domain, tabId }).then(sendResponse);
     return true;
   }
+
+  if (message.type === 'GET_CAPTURED_DESTINATION') {
+    // Same rule as REQUEST_CONTINUE/VALIDATE_PIN — tab identity always
+    // from `sender.tab.id`, never from the message body, so a sibling
+    // enforcement page can never ask for another tab's captured
+    // destination by supplying a different tabId. `cid` is the primary
+    // association (not a bare domain string) — see
+    // destination-capture-service.ts's own doc comment for why.
+    const tabId = sender.tab?.id;
+    if (tabId === undefined || typeof message.cid !== 'string') {
+      sendResponse({ success: true, data: { url: null } });
+      return false;
+    }
+    getCapturedDestination(tabId, message.cid).then((url) => {
+      sendResponse({ success: true, data: { url } });
+    });
+    return true;
+  }
 });
 
 chrome.storage.onChanged.addListener((changes, namespace) => {
@@ -326,6 +350,12 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
     loadConstraints().then(pruneStaleDocumentClearances).catch((error) => {
       console.error('[boomrng] Failed to prune stale document clearances:', error);
     });
+    // Keeps destination-capture-service.ts's synchronous match cache
+    // current — the same loadConstraints() shape as the two calls above,
+    // no extra storage read.
+    loadConstraints().then(refreshConstraintCache).catch((error) => {
+      console.error('[boomrng] Failed to refresh constraint cache:', error);
+    });
   }
 });
 
@@ -354,9 +384,21 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   // redirect (facebook.com -> web.facebook.com) always gets the chance to
   // finish under the grant before it's revoked (see continuation-service.ts).
   if (changeInfo.status === 'complete') {
-    handleNavigationComplete(tabId).catch((error) => {
-      console.error('[boomrng] Failed to clean up continuation on navigation complete:', error);
-    });
+    // A non-null result means this exact completion just consumed a real
+    // continuation grant — the one moment the captured original
+    // destination has actually served its purpose (bridged the
+    // enforcement page back to the real site), so it's cleared here
+    // rather than left to keep refreshing itself for the rest of its
+    // 3-hour TTL on ordinary post-Continue browsing. A `null` result
+    // (still on Checkpoint/Delay/PIN waiting, a refresh, stale-route
+    // reconciliation) leaves the capture untouched.
+    handleNavigationComplete(tabId)
+      .then((consumedGrant) => {
+        if (consumedGrant) clearCapturedDestination(tabId);
+      })
+      .catch((error) => {
+        console.error('[boomrng] Failed to clean up continuation on navigation complete:', error);
+      });
   }
   // 'loading' — not any url change — is the signal a genuine new
   // top-level navigation is starting: `history.pushState`/`replaceState`
@@ -374,6 +416,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   handleTabRemoved(tabId).catch((error) => {
     console.error('[boomrng] Failed to clean up continuation on tab close:', error);
   });
+  clearCapturedDestination(tabId);
   updateBadge().catch((error) => {
     console.error('[boomrng] Failed to update badge after tab close:', error);
   });
@@ -391,6 +434,14 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
     console.error('[boomrng] Failed to check tab for activation-time enforcement:', error);
   });
 });
+
+// See destination-capture-service.ts's own doc comment for the full
+// design: captures the exact pre-redirect destination of a top-frame
+// navigation matching a live constraint, entirely in memory, so the
+// enforcement page it's about to be redirected to can recover it without
+// it ever appearing in the DNR redirect URL (and therefore never in
+// Chrome History) — BOOMRNG-V2-DESIGN-SPEC.md §30.7.
+chrome.webNavigation.onBeforeNavigate.addListener(handleBeforeNavigate);
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === RULE_TIMER_ALARM) {
@@ -416,6 +467,16 @@ function syncStateOnBoot(): void {
   });
   updateBadge().catch((error) => {
     console.error('[boomrng] Failed to initialize badge:', error);
+  });
+  // Populates destination-capture-service.ts's synchronous match cache on
+  // (re)start. Accepted gap, same class as every other in-memory
+  // background state in this codebase: a navigation matching a
+  // just-created constraint that happens in the brief window before this
+  // resolves is simply not captured — the enforcement page falls back to
+  // the safe domain-root reconstruction for that one visit, never a
+  // false or unsafe result.
+  loadConstraints().then(refreshConstraintCache).catch((error) => {
+    console.error('[boomrng] Failed to initialize constraint cache:', error);
   });
 }
 

@@ -101,7 +101,7 @@ async function submitPin(): Promise<void> {
     // correct, and the page never navigates unless this grant succeeds.
     const granted = domain ? await requestContinuation(domain) : false;
     if (granted) {
-      goBackToOriginal();
+      await goBackToOriginal();
       return;
     }
     setBusy(false);

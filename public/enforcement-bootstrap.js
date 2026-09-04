@@ -1,4 +1,18 @@
 /**
+ * DEAD-IN-PRACTICE, RETAINED AS INERT DEFENSIVE COMPATIBILITY CODE
+ * (BOOMRNG-V2-DESIGN-SPEC.md §30.7). `rules-builder.ts` no longer
+ * produces a URL fragment at all — the original destination this script
+ * used to read from `location.hash` briefly committed the destination to
+ * Chrome's permanent History before this script (or anything else) could
+ * ever run, a confirmed real-Chrome privacy defect. The destination is
+ * now captured independently in the background
+ * (`src/background/destination-capture-service.ts`) and asked for by
+ * `enforcement/shared/utils.ts`'s `getOriginalUrl()`. Every branch below
+ * is now a no-op on every real load (there is never a hash to find) —
+ * kept only because it's cheap and harmless, in case some non-DNR path
+ * ever again lands here with one; its continued presence is not evidence
+ * a fragment is still in normal use.
+ *
  * Earliest possible synchronous script for every enforcement page
  * (Checkpoint, Delay, PIN Required, Hard Block) — loaded via a plain
  * classic `<script src>` tag, not inline, and not `type="module"` (which

@@ -174,156 +174,203 @@ describe('sessionStorage lifecycle for the stored original destination, end to e
     expect(window.sessionStorage.getItem(ORIGINAL_URL_STORAGE_KEY)).toBe('https://a.example/');
   });
 
-  it('refresh (fragment already stripped by the prior load) reuses the stored original', () => {
+  it('refresh (fragment already stripped by the prior load) reuses the stored original', async () => {
     const store: Record<string, string> = {};
     setLocation('?cid=c1&behavior=checkpoint', '#https://a.example/', '/dist/src/enforcement/checkpoint/index.html', undefined, store);
     runBootstrap();
 
     // Simulate the refresh: same tab (same store), hash already gone.
     setLocation('?cid=c1&behavior=checkpoint', '', '/dist/src/enforcement/checkpoint/index.html', undefined, store);
-    expect(getOriginalUrl()).toBe('https://a.example/');
+    expect(await getOriginalUrl()).toBe('https://a.example/');
   });
 
-  it('an internal reconciliation reroute (built without a fragment, by design) reuses the stored original in the same tab', () => {
+  it('an internal reconciliation reroute (built without a fragment, by design) reuses the stored original in the same tab', async () => {
     const store: Record<string, string> = {};
     setLocation('?cid=c1&behavior=hard-block', '#https://a.example/', '/dist/src/enforcement/block/index.html', undefined, store);
     runBootstrap();
 
     // Simulate landing on the reroute target: same tab/store, no fragment.
     setLocation('?cid=c1&behavior=delay', '', '/dist/src/enforcement/delay/index.html', undefined, store);
-    expect(getOriginalUrl()).toBe('https://a.example/');
+    expect(await getOriginalUrl()).toBe('https://a.example/');
   });
 
-  it('a later, unrelated constrained navigation in the same tab overwrites the previous stored original', () => {
+  it('a later, unrelated constrained navigation in the same tab overwrites the previous stored original', async () => {
     const store: Record<string, string> = {};
     setLocation('?cid=a&behavior=checkpoint', '#https://a.example/', '/dist/src/enforcement/checkpoint/index.html', undefined, store);
     runBootstrap();
-    expect(getOriginalUrl()).toBe('https://a.example/');
+    expect(await getOriginalUrl()).toBe('https://a.example/');
 
     // A genuinely new DNR match in the same tab, a different domain entirely.
     setLocation('?cid=b&behavior=checkpoint', '#https://b.example/', '/dist/src/enforcement/checkpoint/index.html', undefined, store);
     runBootstrap();
-    expect(getOriginalUrl()).toBe('https://b.example/');
+    expect(await getOriginalUrl()).toBe('https://b.example/');
   });
 
-  it('REGRESSION: domain A stores a valid original, a later load in the same tab has an invalid fragment → stored value is cleared, not left as A', () => {
+  it('REGRESSION: domain A stores a valid original, a later load in the same tab has an invalid fragment → stored value is cleared, not left as A', async () => {
     const store: Record<string, string> = {};
     setLocation('?cid=a&behavior=checkpoint', '#https://a.example/', '/dist/src/enforcement/checkpoint/index.html', undefined, store);
     runBootstrap();
-    expect(getOriginalUrl()).toBe('https://a.example/');
+    expect(await getOriginalUrl()).toBe('https://a.example/');
 
     setLocation('?cid=b&behavior=checkpoint', '#not a url at all', '/dist/src/enforcement/checkpoint/index.html', undefined, store);
     runBootstrap();
 
     expect(window.sessionStorage.getItem(ORIGINAL_URL_STORAGE_KEY)).toBeNull();
-    expect(getOriginalUrl()).not.toBe('https://a.example/');
+    expect(await getOriginalUrl()).not.toBe('https://a.example/');
   });
 });
 
 describe('getOriginalUrl — regression coverage for the real Chrome QA report', () => {
-  it('recovers the exact reported facebook.com case', () => {
+  it('recovers the exact reported facebook.com case', async () => {
     // chrome-extension://ldmcghacdhjhglclmboldeanhbmjhegd/dist/src/enforcement/checkpoint/index.html?cid=c1&behavior=checkpoint#https://www.facebook.com/
     setLocation('?cid=c1&behavior=checkpoint', '#https://www.facebook.com/');
-    expect(getOriginalUrl()).toBe('https://www.facebook.com/');
+    expect(await getOriginalUrl()).toBe('https://www.facebook.com/');
   });
 
-  it('preserves a full path and query string', () => {
+  it('preserves a full path and query string', async () => {
     const original = 'https://example.com/path/to/page?foo=bar&baz=123';
     setLocation('?cid=c1&behavior=checkpoint', `#${original}`);
-    expect(getOriginalUrl()).toBe(original);
+    expect(await getOriginalUrl()).toBe(original);
   });
 
-  it('preserves protocol, hostname, port, path, query, and hash together', () => {
+  it('preserves protocol, hostname, port, path, query, and hash together', async () => {
     const original = 'https://sub.example.com:8443/a/b?x=1&y=2#anchor';
     setLocation('?cid=c1&behavior=checkpoint', `#${original}`);
-    expect(getOriginalUrl()).toBe(original);
+    expect(await getOriginalUrl()).toBe(original);
   });
 
-  it('recovers a URL containing percent-encoded characters without corrupting them', () => {
+  it('recovers a URL containing percent-encoded characters without corrupting them', async () => {
     const original = 'https://example.com/search?q=hello%20world%26more';
     setLocation('?cid=c1&behavior=checkpoint', `#${original}`);
-    expect(getOriginalUrl()).toBe(original);
+    expect(await getOriginalUrl()).toBe(original);
   });
 
-  it('recovers a URL whose own hash contains query-like characters, treating everything after the first "#" as one opaque destination', () => {
+  it('recovers a URL whose own hash contains query-like characters, treating everything after the first "#" as one opaque destination', async () => {
     const original = 'https://example.com/page?a=1#section?not-a-real-param=2&also-not=3';
     setLocation('?cid=c1&behavior=checkpoint', `#${original}`);
-    expect(getOriginalUrl()).toBe(original);
+    expect(await getOriginalUrl()).toBe(original);
   });
 
-  it('tolerates a fragment that was percent-encoded as a single unit, by decoding once', () => {
+  it('tolerates a fragment that was percent-encoded as a single unit, by decoding once', async () => {
     const original = 'https://example.com/path?a=1&b=2';
     setLocation('?cid=c1&behavior=checkpoint', `#${encodeURIComponent(original)}`);
-    expect(getOriginalUrl()).toBe(original);
+    expect(await getOriginalUrl()).toBe(original);
   });
 
-  it('reads from sessionStorage when the hash is already gone (the normal post-bootstrap case)', () => {
+  it('reads from sessionStorage when the hash is already gone (the normal post-bootstrap case)', async () => {
     const store: Record<string, string> = {};
     setLocation('?cid=c1&behavior=checkpoint', '#https://example.com/stored', '/dist/src/enforcement/checkpoint/index.html', undefined, store);
     runBootstrap();
     setLocation('?cid=c1&behavior=checkpoint', '', '/dist/src/enforcement/checkpoint/index.html', undefined, store);
-    expect(getOriginalUrl()).toBe('https://example.com/stored');
+    expect(await getOriginalUrl()).toBe('https://example.com/stored');
   });
 
-  it('falls back to the domain reconstruction for malformed/invalid fragment data with nothing stored', () => {
+  it('falls back to the domain reconstruction for malformed/invalid fragment data with nothing stored', async () => {
     setLocation('?domain=example.com&behavior=checkpoint', '#not a url at all, just text');
-    expect(getOriginalUrl()).toBe('https://example.com');
+    expect(await getOriginalUrl()).toBe('https://example.com');
   });
 
-  it('falls back to the domain reconstruction for a fragment with unrecoverable percent-encoding, nothing stored', () => {
+  it('falls back to the domain reconstruction for a fragment with unrecoverable percent-encoding, nothing stored', async () => {
     setLocation('?domain=example.com&behavior=checkpoint', '#%E0%A4%A');
-    expect(getOriginalUrl()).toBe('https://example.com');
+    expect(await getOriginalUrl()).toBe('https://example.com');
   });
 
-  it('never navigates to a non-http(s) value found in the fragment (javascript:)', () => {
+  it('never navigates to a non-http(s) value found in the fragment (javascript:)', async () => {
     setLocation('?domain=example.com&behavior=checkpoint', '#javascript:alert(1)');
-    expect(getOriginalUrl()).toBe('https://example.com');
+    expect(await getOriginalUrl()).toBe('https://example.com');
   });
 
-  it('never navigates to a non-http(s) value found in the fragment (data:)', () => {
+  it('never navigates to a non-http(s) value found in the fragment (data:)', async () => {
     setLocation('?domain=example.com&behavior=checkpoint', '#data:text/html,<script>alert(1)</script>');
-    expect(getOriginalUrl()).toBe('https://example.com');
+    expect(await getOriginalUrl()).toBe('https://example.com');
   });
 
-  it('never navigates to a non-http(s) value found in the fragment (chrome-extension:)', () => {
+  it('never navigates to a non-http(s) value found in the fragment (chrome-extension:)', async () => {
     setLocation('?domain=example.com&behavior=checkpoint', '#chrome-extension://other-ext/page.html');
-    expect(getOriginalUrl()).toBe('https://example.com');
+    expect(await getOriginalUrl()).toBe('https://example.com');
   });
 
-  it('prefers the hash-encoded original URL over reconstructing one from the domain param', () => {
+  it('prefers the hash-encoded original URL over reconstructing one from the domain param', async () => {
     const original = 'https://example.com/deep/page?x=1';
     setLocation('?domain=example.com&behavior=delay', `#${original}`);
-    expect(getOriginalUrl()).toBe(original);
+    expect(await getOriginalUrl()).toBe(original);
   });
 
-  it('falls back to a bare https://{domain} reconstruction only when no hash and nothing stored is present', () => {
+  it('falls back to a bare https://{domain} reconstruction only when no hash and nothing stored is present', async () => {
     setLocation('?domain=example.com&behavior=checkpoint', '');
-    expect(getOriginalUrl()).toBe('https://example.com');
+    expect(await getOriginalUrl()).toBe('https://example.com');
   });
 
-  it('returns null when neither a usable hash, a stored value, nor a domain param is present', () => {
+  it('returns null when neither a usable hash, a stored value, nor a domain param is present', async () => {
     setLocation('', '');
-    expect(getOriginalUrl()).toBeNull();
+    expect(await getOriginalUrl()).toBeNull();
+  });
+
+  it('the background-capture path is skipped entirely when the page has no cid at all (legacy domain= URL)', async () => {
+    setLocation('?domain=example.com&behavior=checkpoint', '#https://example.com/deep');
+    // No `chrome` global installed — if this page tried to message the
+    // background at all despite having no cid, sendMessage() would throw
+    // and this would still (correctly) fall through to the hash. This
+    // instead confirms the hash path itself is reached directly.
+    expect(await getOriginalUrl()).toBe('https://example.com/deep');
+  });
+});
+
+describe('getOriginalUrl — background-capture primary path', () => {
+  afterEach(() => {
+    delete (globalThis as unknown as { chrome?: unknown }).chrome;
+  });
+
+  function mockCapturedDestination(url: string | null) {
+    (globalThis as unknown as { chrome: unknown }).chrome = {
+      runtime: {
+        sendMessage(message: { type: string; cid: string }, callback: (response: unknown) => void) {
+          expect(message).toEqual({ type: 'GET_CAPTURED_DESTINATION', cid: 'c1' });
+          callback({ success: true, data: { url } });
+        },
+      },
+    };
+  }
+
+  it('prefers the background-captured destination over the (now-absent) fragment and any stored/guessed fallback', async () => {
+    mockCapturedDestination('https://example.com/deep/path?boomrng_test=123');
+    setLocation('?cid=c1&behavior=checkpoint', '');
+    expect(await getOriginalUrl()).toBe('https://example.com/deep/path?boomrng_test=123');
+  });
+
+  it('falls back to the domain-guess reconstruction when the background has nothing captured', async () => {
+    mockCapturedDestination(null);
+    setLocation('?cid=c1&behavior=checkpoint&domain=example.com', '');
+    // No hash, no sessionStorage value, no domain= — but resolveEnforcementContext
+    // isn't in play here, only getDomain()'s own ?domain= fallback (still
+    // present on the URL for this test).
+    expect(await getOriginalUrl()).toBe('https://example.com');
+  });
+
+  it('ignores a background response carrying a non-http(s) value rather than trusting it blindly', async () => {
+    mockCapturedDestination('javascript:alert(1)');
+    setLocation('?cid=c1&behavior=checkpoint&domain=example.com', '');
+    expect(await getOriginalUrl()).toBe('https://example.com');
   });
 });
 
 describe('goBackToOriginal', () => {
-  it('navigates to the validated original destination', () => {
+  it('navigates to the validated original destination', async () => {
     const win = setLocation('?cid=c1&behavior=checkpoint', '#https://www.facebook.com/');
-    goBackToOriginal();
+    await goBackToOriginal();
     expect(win.location.href).toBe('https://www.facebook.com/');
     expect(win.history.back).not.toHaveBeenCalled();
   });
 
-  it('falls back to history.back() when there is nothing safe to navigate to', () => {
+  it('falls back to history.back() when there is nothing safe to navigate to', async () => {
     const win = setLocation('', '');
-    goBackToOriginal();
+    await goBackToOriginal();
     expect(win.history.back).toHaveBeenCalledOnce();
   });
 
-  it('falls back to history.back() rather than navigating to an unsafe fragment value', () => {
+  it('falls back to history.back() rather than navigating to an unsafe fragment value', async () => {
     const win = setLocation('', '#javascript:alert(1)');
-    goBackToOriginal();
+    await goBackToOriginal();
     expect(win.history.back).toHaveBeenCalledOnce();
   });
 });
@@ -339,7 +386,7 @@ describe('goBackOrToOriginal', () => {
     expect(win.history.back).toHaveBeenCalledOnce();
   });
 
-  it('does not fall back when history.back() actually navigated (location changed)', () => {
+  it('does not fall back when history.back() actually navigated (location changed)', async () => {
     const win = setLocation('?cid=c1&behavior=checkpoint', '#https://example.com/');
     // Simulate history.back() succeeding by having it change location.href
     // itself, the way a real cross-document navigation would.
@@ -348,28 +395,28 @@ describe('goBackOrToOriginal', () => {
     });
 
     goBackOrToOriginal();
-    vi.advanceTimersByTime(200);
+    await vi.advanceTimersByTimeAsync(200);
 
     expect(win.location.href).toBe('https://prior-page.example/');
   });
 
-  it('falls back to the validated original destination once the location genuinely did not change', () => {
+  it('falls back to the validated original destination once the location genuinely did not change', async () => {
     const win = setLocation('?cid=c1&behavior=checkpoint', '#https://example.com/deep/page?x=1');
     // history.back() is a no-op here — nothing changes location.href.
     const hrefBefore = win.location.href;
 
     goBackOrToOriginal();
     expect(win.location.href).toBe(hrefBefore); // unchanged immediately after the call — the fallback is deferred
-    vi.advanceTimersByTime(200);
+    await vi.advanceTimersByTimeAsync(200);
 
     expect(win.location.href).toBe('https://example.com/deep/page?x=1');
   });
 
-  it('does nothing further when there is no history entry and no usable original destination either', () => {
+  it('does nothing further when there is no history entry and no usable original destination either', async () => {
     const win = setLocation('', '');
     goBackOrToOriginal();
     const hrefBefore = win.location.href;
-    vi.advanceTimersByTime(200);
+    await vi.advanceTimersByTimeAsync(200);
     expect(win.location.href).toBe(hrefBefore);
   });
 });
@@ -533,16 +580,22 @@ describe('reconcileStaleEnforcementPage — stale enforcement-page routing (conf
     expect(win.location.replace).not.toHaveBeenCalled();
   });
 
-  it('8. no matching constraint anymore (unknown/deleted cid) → safely exits enforcement via the existing goBackToOriginal mechanism, not a canonical-page redirect', () => {
+  it('8. no matching constraint anymore (unknown/deleted cid) → safely exits enforcement via the existing goBackToOriginal mechanism, not a canonical-page redirect', async () => {
     const win = setLocation('?cid=deleted-id&behavior=delay', '#https://www.facebook.com/', PATHS.delay);
     const redirected = reconcileStaleEnforcementPage(null);
     expect(redirected).toBe(true);
+    // reconcileStaleEnforcementPage() deliberately does not await
+    // goBackToOriginal() itself (callers only need its synchronous `true`
+    // to know to stop) — flush the microtask queue so its now-async
+    // navigation has actually run before asserting on it.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(win.location.href).toBe('https://www.facebook.com/');
   });
 
-  it('8b. no matching constraint and no usable original destination → falls back to history.back(), same as goBackToOriginal alone', () => {
+  it('8b. no matching constraint and no usable original destination → falls back to history.back(), same as goBackToOriginal alone', async () => {
     const win = setLocation('', '');
     reconcileStaleEnforcementPage(null);
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(win.history.back).toHaveBeenCalledOnce();
   });
 

@@ -1035,6 +1035,29 @@ describe('documentClearance — activation-time enforcement state machine', () =
     expect(wasConstraintClearedForTab(102, 'c-example.com', 'checkpoint')).toBe(false);
   });
 
+  /**
+   * `handleNavigationComplete`'s return value — purely additive metadata,
+   * widened for `service-worker.ts` to know exactly when a captured
+   * original-destination record (destination-capture-service.ts) has
+   * served its purpose and should stop being retained. A non-null result
+   * here is precisely the "the bridge from enforcement page back to the
+   * original destination was just used for real" signal; a null result
+   * (nothing was actually consumed) must never be mistaken for that.
+   */
+  it('returns the consumed grant\'s {constraintId, behavior} when a real grant was consumed by this completion', async () => {
+    mock.store.constraints = [makeConstraint('example.com', 'checkpoint')];
+    await grantContinuation({ domain: 'example.com', tabId: 110 });
+
+    const result = await handleNavigationComplete(110);
+
+    expect(result).toEqual({ constraintId: 'c-example.com', behavior: 'checkpoint' });
+  });
+
+  it('returns null when no grant was active for this completion — never a false "just consumed" signal', async () => {
+    const result = await handleNavigationComplete(111);
+    expect(result).toBeNull();
+  });
+
   it('3+5. worker-restart simulation: the DNR rule is still unconditionally removed, but no clearance is manufactured for a grant this instance never saw', async () => {
     mock.store.constraints = [makeConstraint('example.com', 'checkpoint')];
     const granted = await grantContinuation({ domain: 'example.com', tabId: 103 });
